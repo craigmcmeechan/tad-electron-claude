@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { ClaudeCodeService } from '../services/claudeCodeService';
 import { ChatMessageService } from '../services/chatMessageService';
 import { generateWebviewHtml } from '../templates/webviewTemplate';
 import { WebviewContext } from '../types/context';
@@ -97,7 +96,7 @@ export class ChatSidebarProvider implements vscode.WebviewViewProvider {
 
     private async handleGetCurrentProvider(webview: vscode.Webview) {
         const config = vscode.workspace.getConfiguration('superdesign');
-        const currentProvider = config.get<string>('aiModelProvider', 'anthropic');
+        const currentProvider = config.get<string>('aiModelProvider', 'openai');
         const currentModel = config.get<string>('aiModel');
         
         // If no specific model is set, use defaults
@@ -107,11 +106,11 @@ export class ChatSidebarProvider implements vscode.WebviewViewProvider {
                 defaultModel = 'gpt-4o';
                 break;
             case 'openrouter':
-                defaultModel = 'anthropic/claude-3-7-sonnet-20250219';
+                defaultModel = 'openrouter/auto';
                 break;
             case 'anthropic':
             default:
-                defaultModel = 'claude-3-5-sonnet-20241022';
+                defaultModel = 'gpt-4o';
                 break;
         }
         
@@ -138,11 +137,6 @@ export class ChatSidebarProvider implements vscode.WebviewViewProvider {
                 apiKeyKey = 'openrouterApiKey';
                 configureCommand = 'superdesign.configureOpenRouterApiKey';
                 displayName = `OpenRouter (${this.getModelDisplayName(model)})`;
-            } else if (model.startsWith('claude-')) {
-                provider = 'anthropic';
-                apiKeyKey = 'anthropicApiKey';
-                configureCommand = 'superdesign.configureApiKey';
-                displayName = `Anthropic (${this.getModelDisplayName(model)})`;
             } else {
                 provider = 'openai';
                 apiKeyKey = 'openaiApiKey';
@@ -189,14 +183,7 @@ export class ChatSidebarProvider implements vscode.WebviewViewProvider {
             'gpt-4.1-nano': 'GPT-4.1 Nano',
             'gpt-4o': 'GPT-4o',
             'gpt-4o-mini': 'GPT-4o Mini',
-            // Anthropic models
-            'claude-4-opus-20250514': 'Claude 4 Opus',
-            'claude-4-sonnet-20250514': 'Claude 4 Sonnet',
-            'claude-3-7-sonnet-20250219': 'Claude 3.7 Sonnet',
-            'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
-            'claude-3-opus-20240229': 'Claude 3 Opus',
-            'claude-3-sonnet-20240229': 'Claude 3 Sonnet',
-            'claude-3-haiku-20240307': 'Claude 3 Haiku',
+            // OpenRouter generic
             // OpenRouter - Google models
             'google/gemini-2.5-pro': 'Gemini 2.5 Pro',
             'google/gemini-2.5-flash': 'Gemini 2.5 Flash',

@@ -49,7 +49,7 @@ All notable changes to the "superdesign" extension will be documented in this fi
 ### Added
 - Centralized logging system with configurable log levels
 - Enhanced error handling and debugging capabilities
-- Improved Claude Code service integration
+ - Removed Claude Code integration and references for Windows compatibility
 
 ### Fixed
 - Performance optimizations and stability improvements
@@ -87,7 +87,7 @@ All notable changes to the "superdesign" extension will be documented in this fi
 - Design frame components for organizing content
 - Connection lines for linking design elements
 - Welcome screen for first-time users
-- Claude Code service integration
+ - Removed Claude Code references in services and UI
 - Chat sidebar provider for seamless VS Code integration
 - Support for multiple AI provider logos (Claude, Cursor, Bolt, Lovable, Windsurf)
 - Markdown rendering capabilities

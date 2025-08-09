@@ -19,7 +19,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
     const { chatHistory, isLoading, sendMessage, clearHistory, setChatHistory } = useChat(vscode);
     const { isFirstTime, isLoading: isCheckingFirstTime, markAsReturningUser, resetFirstTimeUser } = useFirstTimeUser();
     const [inputMessage, setInputMessage] = useState('');
-    const [selectedModel, setSelectedModel] = useState<string>('claude-3-5-sonnet-20241022');
+    const [selectedModel, setSelectedModel] = useState<string>('gpt-4o');
     const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
     const [showFullContent, setShowFullContent] = useState<{[key: string]: boolean}>({});
     const [currentContext, setCurrentContext] = useState<{fileName: string; type: string} | null>(null);
@@ -55,11 +55,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
                         fallbackModel = 'gpt-4o';
                         break;
                     case 'openrouter':
-                        fallbackModel = 'anthropic/claude-3-7-sonnet-20250219';
+                        fallbackModel = 'openrouter/auto';
                         break;
                     case 'anthropic':
                     default:
-                        fallbackModel = 'claude-3-5-sonnet-20241022';
+                        fallbackModel = 'gpt-4o';
                         break;
                 }
                 setSelectedModel(message.model || fallbackModel);
@@ -738,7 +738,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
                     <div key={index} className={`chat-message chat-message--assistant chat-message--${layout} chat-message--mixed-content`}>
                         {layout === 'panel' && (
                             <div className="chat-message__header">
-                                <span className="chat-message__label">Claude</span>
+                                <span className="chat-message__label">Assistant</span>
                                 {msg.metadata && (
                                     <span className="chat-message__metadata">
                                         {msg.metadata.duration_ms && (
@@ -781,7 +781,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
                 messageClass = 'user';
                 break;
             case 'assistant':
-                messageLabel = 'Claude';
+                                messageLabel = 'Assistant';
                 messageClass = 'assistant';
                 break;
             case 'system':
@@ -1303,7 +1303,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
             <div className="chat-placeholder__content">
                 <div className="empty-state-message">
                     <p>
-                        <strong>Cursor/Windsurf/Claude Code rules already added</strong>, prompt Cursor/Windsurf/Claude Code to design UI like <kbd>Help me design a calculator UI</kbd> and preview the UI in Superdesign canvas by <kbd>Cmd+Shift+P</kbd> <code>'Superdesign: Open canvas view'</code>
+                                <strong>Cursor/Windsurf rules already added</strong>, prompt your tool to design UI like <kbd>Help me design a calculator UI</kbd> and preview the UI in Superdesign canvas by <kbd>Cmd+Shift+P</kbd> <code>'Superdesign: Open canvas view'</code>
                     </p>
                     <div className="empty-state-divider">OR</div>
                     <p>
@@ -1325,8 +1325,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
 
             {layout === 'panel' && (
                 <header className="chat-header">
-                    <h2>💬 Chat with Claude</h2>
-                    <p>Ask Claude anything about code, design, or development!</p>
+                    <h2>💬 Chat</h2>
+                    <p>Ask anything about code, design, or development!</p>
                     <button 
                         className="new-conversation-btn"
                         onClick={handleNewConversation}

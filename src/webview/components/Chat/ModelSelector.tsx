@@ -22,11 +22,8 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ selectedModel, onModelCha
     const modalRef = useRef<HTMLDivElement>(null);
 
     const models: ModelOption[] = [
-        // Anthropic
-        { id: 'claude-4-opus-20250514', name: 'Claude 4 Opus', provider: 'Anthropic', category: 'Premium' },
-        { id: 'claude-4-sonnet-20250514', name: 'Claude 4 Sonnet', provider: 'Anthropic', category: 'Balanced' },
-        { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet', provider: 'Anthropic', category: 'Balanced' },
-        { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', provider: 'Anthropic', category: 'Balanced' },
+        // OpenRouter auto
+        { id: 'openrouter/auto', name: 'OpenRouter Auto', provider: 'OpenRouter', category: 'Balanced' },
         // Google (OpenRouter)
         { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'OpenRouter (Google)', category: 'Balanced' },
         // Meta (OpenRouter)
@@ -53,7 +50,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ selectedModel, onModelCha
         { id: 'inflection/inflection-3-productivity', name: 'Inflection 3 Productivity', provider: 'OpenRouter (Inflection)', category: 'Balanced' },
         // Reka (OpenRouter)
         { id: 'rekaai/reka-flash-3', name: 'Reka Flash 3', provider: 'OpenRouter (Reka)', category: 'Balanced' },
-        // Existing OpenAI (direct)
+        // OpenAI (direct)
         { id: 'gpt-4.1', name: 'GPT-4.1', provider: 'OpenAI', category: 'Balanced' },
         { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', provider: 'OpenAI', category: 'Fast' }
     ];

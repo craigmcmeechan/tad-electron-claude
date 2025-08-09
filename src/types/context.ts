@@ -6,7 +6,6 @@ export interface WebviewContext {
     logoUris?: {
         cursor: string;
         windsurf: string;
-        claudeCode: string;
         lovable: string;
         bolt: string;
     };

@@ -89,15 +89,13 @@ export class CustomAgentService implements AgentService {
         
         // Determine provider from model name if specific model is set
         let effectiveProvider = provider;
-        if (specificModel) {
-            if (specificModel.includes('/')) {
-                effectiveProvider = 'openrouter';
-            } else if (specificModel.startsWith('claude-')) {
-                effectiveProvider = 'anthropic';
-            } else {
-                effectiveProvider = 'openai';
+            if (specificModel) {
+                if (specificModel.includes('/')) {
+                    effectiveProvider = 'openrouter';
+                } else {
+                    effectiveProvider = 'openai';
+                }
             }
-        }
         
         switch (effectiveProvider) {
             case 'openrouter':
@@ -112,31 +110,10 @@ export class CustomAgentService implements AgentService {
                     apiKey: openrouterKey
                 });
                 
-                // Use specific model if available, otherwise default to Claude 3.7 Sonnet via OpenRouter
-                const openrouterModel = specificModel || 'anthropic/claude-3-7-sonnet-20250219';
+                // Use specific model if available, otherwise auto-select via OpenRouter
+                const openrouterModel = specificModel || 'openrouter/auto';
                 this.outputChannel.appendLine(`Using OpenRouter model: ${openrouterModel}`);
                 return openrouter.chat(openrouterModel);
-                
-            case 'anthropic':
-                const anthropicKey = config.get<string>('anthropicApiKey');
-                if (!anthropicKey) {
-                    throw new Error('Anthropic API key not configured. Please run "Configure Anthropic API Key" command.');
-                }
-                
-                this.outputChannel.appendLine(`Anthropic API key found: ${anthropicKey.substring(0, 12)}...`);
-                
-                const anthropic = createAnthropic({
-                    apiKey: anthropicKey,
-                    baseURL: "https://anthropic.helicone.ai/v1",
-                    headers: {
-                        "Helicone-Auth": `Bearer sk-helicone-utidjzi-eprey7i-tvjl25y-yl7mosi`,
-                    }
-                });
-                
-                // Use specific model if available, otherwise default to claude-3-5-sonnet
-                const anthropicModel = specificModel || 'claude-3-5-sonnet-20241022';
-                this.outputChannel.appendLine(`Using Anthropic model: ${anthropicModel}`);
-                return anthropic(anthropicModel);
                 
             case 'openai':
             default:
@@ -178,11 +155,10 @@ export class CustomAgentService implements AgentService {
                     modelName = 'gpt-4o';
                     break;
                 case 'openrouter':
-                    modelName = 'anthropic/claude-3-7-sonnet-20250219';
+                    modelName = 'openrouter/auto';
                     break;
-                case 'anthropic':
                 default:
-                    modelName = 'claude-3-5-sonnet-20241022';
+                    modelName = 'gpt-4o';
                     break;
             }
         }
@@ -886,25 +862,21 @@ I've created the html design, please reveiw and let me know if you need any chan
     hasApiKey(): boolean {
         const config = vscode.workspace.getConfiguration('superdesign');
         const specificModel = config.get<string>('aiModel');
-        const provider = config.get<string>('aiModelProvider', 'anthropic');
+        const provider = config.get<string>('aiModelProvider', 'openai');
         
         // Determine provider from model name if specific model is set
         let effectiveProvider = provider;
-        if (specificModel) {
-            if (specificModel.includes('/')) {
-                effectiveProvider = 'openrouter';
-            } else if (specificModel.startsWith('claude-')) {
-                effectiveProvider = 'anthropic';
-            } else {
-                effectiveProvider = 'openai';
+            if (specificModel) {
+                if (specificModel.includes('/')) {
+                    effectiveProvider = 'openrouter';
+                } else {
+                    effectiveProvider = 'openai';
+                }
             }
-        }
         
         switch (effectiveProvider) {
             case 'openrouter':
                 return !!config.get<string>('openrouterApiKey');
-            case 'anthropic':
-                return !!config.get<string>('anthropicApiKey');
             case 'openai':
             default:
                 return !!config.get<string>('openaiApiKey');

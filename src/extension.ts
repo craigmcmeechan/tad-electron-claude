@@ -1206,19 +1206,6 @@ html.dark {
 			await vscode.workspace.fs.writeFile(designMdcPath, Buffer.from(designRuleMdcContent, 'utf8'));
 		}
 
-		// Create or append to CLAUDE.md
-		const claudeMdPath = vscode.Uri.joinPath(workspaceRoot, 'CLAUDE.md');
-		try {
-			const existingContent = await vscode.workspace.fs.readFile(claudeMdPath);
-			const currentContent = Buffer.from(existingContent).toString('utf8');
-			if (!currentContent.includes('superdesign: Open Canvas View')) {
-				const updatedContent = currentContent + '\n\n' + designRuleContent;
-				await vscode.workspace.fs.writeFile(claudeMdPath, Buffer.from(updatedContent, 'utf8'));
-			}
-		} catch {
-			// File doesn't exist, create it
-			await vscode.workspace.fs.writeFile(claudeMdPath, Buffer.from(designRuleContent, 'utf8'));
-		}
 
 		// Create or append to .windsurfrules
 		const windsurfRulesPath = vscode.Uri.joinPath(workspaceRoot, '.windsurfrules');
@@ -1234,7 +1221,7 @@ html.dark {
 			await vscode.workspace.fs.writeFile(windsurfRulesPath, Buffer.from(designRuleContent, 'utf8'));
 		}
 
-		vscode.window.showInformationMessage('✅ Superdesign project initialized successfully! Created .superdesign folder and design rules for Cursor, Claude, and Windsurf.');
+		vscode.window.showInformationMessage('✅ Superdesign project initialized successfully! Created .superdesign folder and design rules for Cursor and Windsurf.');
 		
 	} catch (error) {
 		vscode.window.showErrorMessage(`Failed to initialize Superdesign project: ${error}`);
@@ -1700,7 +1687,6 @@ class SuperdesignCanvasPanel {
 		const logoUris = {
 			cursor: webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'src', 'assets', 'cursor_logo.png')).toString(),
 			windsurf: webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'src', 'assets', 'windsurf_logo.png')).toString(),
-			claudeCode: webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'src', 'assets', 'claude_code_logo.png')).toString(),
 			lovable: webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'src', 'assets', 'lovable_logo.png')).toString(),
 			bolt: webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'src', 'assets', 'bolt_logo.jpg')).toString(),
 		};

@@ -6,7 +6,7 @@
 
 SuperDesign is the first **open-source design agent** that lives right inside your IDE.  
 Generate UI mockups, components, and wireframes directly from natural language prompts.  
-Works seamlessly with Cursor, Windsurf, Claude Code, and plain VS Code.
+Works seamlessly with Cursor, Windsurf, and plain VS Code.
 
 > ✨ "Why design one option when you can explore ten?" — SuperDesign
 
@@ -30,11 +30,11 @@ Works seamlessly with Cursor, Windsurf, Claude Code, and plain VS Code.
 - 🧩 **UI Components**: Create reusable components you can drop into your code
 - 📝 **Wireframes**: Explore low-fidelity layouts for fast iteration
 - 🔁 **Fork & Iterate**: Duplicate and evolve designs easily
-- 📥 **Prompt-to-IDE**: Copy prompts into your favorite AI IDE (Cursor, Windsurf, Claude Code)
+- 📥 **Prompt-to-IDE**: Copy prompts into your favorite AI IDE (Cursor, Windsurf)
 
 ---
 
-## 🧠 Works Great With Cursor, Windsurf, Claude Code, VS Code
+## 🧠 Works Great With Cursor, Windsurf, VS Code
 
 👉 [Install here](https://www.superdesign.dev/)
 
@@ -50,8 +50,8 @@ Works seamlessly with Cursor, Windsurf, Claude Code, and plain VS Code.
 
 ---
 
-## Can I use my own Claude Code or Cursor subscription?
-Yes, after you initialise superdesign extension, some cursor/claude code rules will be added, so you can prompt the agent to do design and preview in superdesign canva (cmd + shift + p -> superdesign: open canva)
+## Can I use my own Cursor subscription?
+Yes, after you initialise superdesign extension, some Cursor/Windsurf rules will be added, so you can prompt the agent to do design and preview in superdesign canvas (Ctrl/Cmd + Shift + P → Superdesign: Open Canvas View)
 
 If using Cursor - I will highly suggest copy the prompt in 'design.mdc' and create a custom mode in cursor with that same system prompt; This should give you much better performance
 

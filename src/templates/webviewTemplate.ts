@@ -14,10 +14,9 @@ export function generateWebviewHtml(
     const logoUris = {
         cursor: webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'src', 'assets', 'cursor_logo.png')).toString(),
         windsurf: webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'src', 'assets', 'windsurf_logo.png')).toString(),
-        claudeCode: webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'src', 'assets', 'claude_code_logo.png')).toString(),
         lovable: webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'src', 'assets', 'lovable_logo.png')).toString(),
         bolt: webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'src', 'assets', 'bolt_logo.jpg')).toString(),
-    };
+    } as const;
 
     // Debug logging
     console.log('Extension URI:', extensionUri.toString());
@@ -27,7 +26,7 @@ export function generateWebviewHtml(
     const fs = require('fs');
     const path = require('path');
     Object.entries(logoUris).forEach(([name, uri]) => {
-        const filePath = path.join(extensionUri.fsPath, 'src', 'assets', name === 'bolt' ? 'bolt_logo.jpg' : `${name === 'claudeCode' ? 'claude_code' : name}_logo.png`);
+        const filePath = path.join(extensionUri.fsPath, 'src', 'assets', name === 'bolt' ? 'bolt_logo.jpg' : `${name}_logo.png`);
         const exists = fs.existsSync(filePath);
         console.log(`${name} logo exists at ${filePath}:`, exists);
     });

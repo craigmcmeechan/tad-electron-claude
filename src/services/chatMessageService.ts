@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { ClaudeCodeService } from './claudeCodeService';
 import { AgentService } from '../types/agent';
 import { CoreMessage } from 'ai';
 import { Logger } from './logger';
@@ -394,64 +393,5 @@ export class ChatMessageService {
         }
     }
 
-    private processClaudeResponse(response: any[]): string {
-        let fullResponse = '';
-        let assistantMessages: string[] = [];
-        let toolResults: string[] = [];
-        
-        for (const msg of response) {
-            const subtype = 'subtype' in msg ? msg.subtype : undefined;
-            Logger.debug(`Processing message type: ${msg.type}${subtype ? `, subtype: ${subtype}` : ''}`);
-            
-            // Collect assistant messages
-            if (msg.type === 'assistant' && msg.message) {
-                let content = '';
-                
-                if (typeof msg.message === 'string') {
-                    content = msg.message;
-                } else if (msg.message.content && Array.isArray(msg.message.content)) {
-                    content = msg.message.content
-                        .filter((item: any) => item.type === 'text')
-                        .map((item: any) => item.text)
-                        .join('\n');
-                } else if (msg.message.content && typeof msg.message.content === 'string') {
-                    content = msg.message.content;
-                }
-                
-                if (content.trim()) {
-                    assistantMessages.push(content);
-                }
-            }
-            
-            // Collect tool results
-            if (msg.type === 'result' && msg.subtype === 'success' && msg.result) {
-                const result = typeof msg.result === 'string' ? msg.result : JSON.stringify(msg.result, null, 2);
-                toolResults.push(result);
-            }
-            
-            // Handle tool usage messages
-            if ((msg.type === 'assistant' || msg.type === 'user') && ('subtype' in msg) && (msg.subtype === 'tool_use' || msg.subtype === 'tool_result')) {
-                Logger.debug(`Tool activity detected: ${msg.subtype}`);
-            }
-        }
-
-        // Combine all responses
-        if (assistantMessages.length > 0) {
-            fullResponse = assistantMessages.join('\n\n');
-        }
-        
-        if (toolResults.length > 0 && !fullResponse.includes(toolResults[0])) {
-            if (fullResponse) {
-                fullResponse += '\n\n--- Tool Results ---\n' + toolResults.join('\n\n');
-            } else {
-                fullResponse = toolResults.join('\n\n');
-            }
-        }
-
-        if (!fullResponse) {
-            fullResponse = 'I processed your request but didn\'t generate a visible response. Check the console for details.';
-        }
-
-        return fullResponse;
-    }
+    // Legacy Claude Code processing removed
 } 

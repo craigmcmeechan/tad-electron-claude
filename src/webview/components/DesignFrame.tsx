@@ -2,12 +2,7 @@ import React from 'react';
 import { DesignFile, GridPosition, FrameDimensions, ViewportMode, WebviewMessage } from '../types/canvas.types';
 import { MobileIcon, TabletIcon, DesktopIcon, GlobeIcon } from './Icons';
 
-// Import logo images
-import cursorLogo from '../../assets/cursor_logo.png';
-import windsurfLogo from '../../assets/windsurf_logo.png';
-import claudeCodeLogo from '../../assets/claude_code_logo.png';
-import lovableLogo from '../../assets/lovable_logo.png';
-import boltLogo from '../../assets/bolt_logo.jpg';
+    // Import logo images (handled via webview URIs in context)
 
 interface DesignFrameProps {
     file: DesignFile;
@@ -115,10 +110,6 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
             case 'windsurf':
                 promptText = `${file.content}\n\nAbove is the design implementation. Please analyze this design and create a similar UI component using modern web technologies and best practices.`;
                 platformName = 'Windsurf';
-                break;
-            case 'claude-code':
-                promptText = `${file.content}\n\nAbove is the design implementation. Please use this as a reference to create a similar component. Focus on clean, maintainable code structure.`;
-                platformName = 'Claude Code';
                 break;
             case 'lovable':
                 promptText = `${file.content}\n\nAbove is the design implementation. Please recreate this design as a responsive React component with modern styling.`;
@@ -763,22 +754,6 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                                         onLoad={() => console.log('Windsurf logo loaded successfully')}
                                     />
                                     <span>Windsurf</span>
-                                </button>
-                                <button
-                                    className="copy-dropdown-item"
-                                    onClick={(e) => handleCopyPrompt(e, 'claude-code')}
-                                >
-                                    <img 
-                                        src={(window as any).__WEBVIEW_CONTEXT__?.logoUris?.claudeCode} 
-                                        alt="Claude Code" 
-                                        className="platform-logo"
-                                        onError={(e) => {
-                                            console.error('Failed to load Claude Code logo:', (window as any).__WEBVIEW_CONTEXT__?.logoUris?.claudeCode);
-                                            console.error('Image error event:', e);
-                                        }}
-                                        onLoad={() => console.log('Claude Code logo loaded successfully')}
-                                    />
-                                    <span>Claude Code</span>
                                 </button>
                                 <button
                                     className="copy-dropdown-item"

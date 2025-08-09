@@ -161,7 +161,7 @@
     margin-bottom: 12px;
 }
 
-/* SDK User messages (from Claude Code SDK) */
+/* Streaming user messages */
 .chat-message--user-sdk {
     background: var(--vscode-input-background);
     border: 1px solid var(--vscode-textLink-foreground);
