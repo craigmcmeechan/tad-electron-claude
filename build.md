@@ -63,6 +63,38 @@ The `test` script invokes `vscode-test` runner setup.
 - Generated assets live in `.superdesign/` at your workspace root:
   - `design_iterations/` for HTML/SVG/CSS outputs
   - `moodboard/` for uploaded images
+  - `dist/` for compiled pages/components (produced by your app/site builder)
+
+#### Build Manifest (for Canvas → Template Mapping)
+If you want the Canvas to show which Page/Component/Element templates a compiled page uses and allow opening them, have your site/app builder emit a manifest at:
+
+`.superdesign/dist/manifest.json`
+
+Schema (per compiled file path relative to `.superdesign/dist/`):
+
+```json
+{
+  "pages/home.html": {
+    "page": { "name": "HomePage", "path": "src/pages/HomePage.tsx" },
+    "components": [
+      { "name": "Header", "path": "src/components/Header.tsx" },
+      { "name": "Hero",   "path": "src/components/Hero.tsx" }
+    ],
+    "elements": [
+      { "name": "Button", "path": "src/ui/Button.tsx" }
+    ]
+  },
+  "components/card.html": {
+    "components": [ { "name": "Card", "path": "src/components/Card.tsx" } ],
+    "elements":   [ { "name": "Badge", "path": "src/ui/Badge.tsx" } ]
+  }
+}
+```
+
+Notes:
+- Keys must match file paths the Canvas loads (e.g., `pages/*.html`, `components/*.html`).
+- `path` can be absolute or workspace-relative. If omitted, the Canvas will still display the name but cannot open the file.
+- The extension automatically reads this manifest when viewing the `dist` source and surfaces the data per-frame via a Templates dropdown.
 
 #### Notes
 - Windows shells: the Bash tool uses `cmd.exe /c` under the hood; project watch/build works cross-platform via Node (Claude Code has been removed for Windows support)

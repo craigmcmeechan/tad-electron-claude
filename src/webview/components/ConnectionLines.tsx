@@ -98,4 +98,24 @@ const ConnectionLines: React.FC<ConnectionLinesProps> = ({
     );
 };
 
-export default ConnectionLines; 
+function areConnectionPropsEqual(prev: ConnectionLinesProps, next: ConnectionLinesProps): boolean {
+    if (prev.isVisible !== next.isVisible) return false;
+    if (prev.zoomLevel !== next.zoomLevel) return false;
+    if (prev.containerBounds.width !== next.containerBounds.width || prev.containerBounds.height !== next.containerBounds.height) return false;
+    const prevConns = prev.connections;
+    const nextConns = next.connections;
+    if (prevConns === nextConns) return true;
+    if (prevConns.length !== nextConns.length) return false;
+    for (let i = 0; i < prevConns.length; i++) {
+        const a = prevConns[i];
+        const b = nextConns[i];
+        if (a.id !== b.id) return false;
+        if (a.fromPosition.x !== b.fromPosition.x || a.fromPosition.y !== b.fromPosition.y) return false;
+        if (a.toPosition.x !== b.toPosition.x || a.toPosition.y !== b.toPosition.y) return false;
+        if ((a.color || '') !== (b.color || '')) return false;
+        if ((a.width || 0) !== (b.width || 0)) return false;
+    }
+    return true;
+}
+
+export default React.memo(ConnectionLines, areConnectionPropsEqual);

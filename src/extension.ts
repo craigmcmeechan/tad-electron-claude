@@ -177,6 +177,71 @@ async function getCssFileContent(filePath: string, sidebarProvider: ChatSidebarP
 	}
 }
 
+// List prompt template markdown files in .superdesign directory
+async function listPromptTemplates(sidebarProvider: ChatSidebarProvider) {
+    try {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            sidebarProvider.sendMessage({
+                command: 'templateList',
+                error: 'No workspace folder found'
+            });
+            return;
+        }
+
+        // Support files like .superdesign/prompts.*.md and any nested matches
+        const patterns = [
+            new vscode.RelativePattern(workspaceFolder, '.superdesign/prompts*.md'),
+            new vscode.RelativePattern(workspaceFolder, '.superdesign/**/prompts*.md')
+        ];
+
+        const foundFilesSets = await Promise.all(patterns.map(p => vscode.workspace.findFiles(p)));
+        const seen = new Set<string>();
+        const files = foundFilesSets.flat().filter(f => {
+            const key = f.fsPath.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
+        const templates = files.map(f => ({
+            filePath: f.fsPath,
+            fileName: f.fsPath.split(/[\\/]/).pop() || f.fsPath
+        }));
+
+        sidebarProvider.sendMessage({
+            command: 'templateList',
+            templates
+        });
+    } catch (error) {
+        sidebarProvider.sendMessage({
+            command: 'templateList',
+            error: error instanceof Error ? error.message : String(error)
+        });
+    }
+}
+
+// Read a specific prompt template file
+async function readPromptTemplate(filePath: string, sidebarProvider: ChatSidebarProvider) {
+    try {
+        const uri = vscode.Uri.file(filePath);
+        const content = await vscode.workspace.fs.readFile(uri);
+        const text = Buffer.from(content).toString('utf8');
+
+        sidebarProvider.sendMessage({
+            command: 'templateContent',
+            filePath,
+            content: text
+        });
+    } catch (error) {
+        sidebarProvider.sendMessage({
+            command: 'templateContent',
+            filePath,
+            error: error instanceof Error ? error.message : String(error)
+        });
+    }
+}
+
 // Function to submit email to Supabase API
 async function submitEmailToSupabase(email: string, sidebarProvider: ChatSidebarProvider) {
 	try {
@@ -1311,6 +1376,14 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.executeCommand('workbench.action.openSettings', '@ext:iganbold.superdesign');
 	});
 
+	// Register command to open Template View in chat panel
+	const openTemplateViewDisposable = vscode.commands.registerCommand('superdesign.openTemplateView', () => {
+		// Ensure the chat sidebar is visible
+		vscode.commands.executeCommand('workbench.view.extension.superdesign-sidebar');
+		// Ask the webview to open the template panel
+		sidebarProvider.sendMessage({ command: 'openTemplateView' });
+	});
+
 	// Register configure API key command (alternative to the existing one)
 	const configureApiKeyQuickDisposable = vscode.commands.registerCommand('superdesign.configureApiKeyQuick', async () => {
 		await configureAnthropicApiKey();
@@ -1371,6 +1444,16 @@ export function activate(context: vscode.ExtensionContext) {
 				console.log('🚀 Received initializeSuperdesign command from webview');
 				vscode.commands.executeCommand('superdesign.initializeProject');
 				break;
+
+            case 'listTemplates':
+                listPromptTemplates(sidebarProvider);
+                break;
+
+            case 'readTemplate':
+                if (typeof message.filePath === 'string') {
+                    readPromptTemplate(message.filePath, sidebarProvider);
+                }
+                break;
 		}
 	});
 
@@ -1386,6 +1469,7 @@ export function activate(context: vscode.ExtensionContext) {
 		resetWelcomeDisposable,
 		initializeProjectDisposable,
 		openSettingsDisposable,
+		openTemplateViewDisposable,
 		configureApiKeyQuickDisposable
 	);
 }
@@ -1533,7 +1617,7 @@ class SuperdesignCanvasPanel {
 	private readonly _extensionUri: vscode.Uri;
 	private readonly _sidebarProvider: ChatSidebarProvider;
 	private _disposables: vscode.Disposable[] = [];
-	private _fileWatcher: vscode.FileSystemWatcher | undefined;
+    private _fileWatchers: vscode.FileSystemWatcher[] = [];
 
 	public static createOrShow(extensionUri: vscode.Uri, sidebarProvider: ChatSidebarProvider) {
 		const column = vscode.window.activeTextEditor?.viewColumn;
@@ -1572,11 +1656,31 @@ class SuperdesignCanvasPanel {
 		this._panel.webview.onDidReceiveMessage(
 			message => {
 				switch (message.command) {
-					case 'loadDesignFiles':
-						this._loadDesignFiles();
+                    case 'loadDesignFiles':
+                        this._loadDesignFiles(message.data);
 						break;
+                    case 'openTemplateFile':
+                        if (message.data?.filePath && typeof message.data.filePath === 'string') {
+                            try {
+                                const rawPath = message.data.filePath as string;
+                                const isAbs = require('path').isAbsolute(rawPath);
+                                const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+                                const resolvedPath = isAbs || !workspaceFolder
+                                    ? rawPath
+                                    : require('path').join(workspaceFolder.uri.fsPath, rawPath);
+                                const uri = vscode.Uri.file(resolvedPath);
+                                vscode.window.showTextDocument(uri, { preview: false });
+                            } catch (err) {
+                                vscode.window.showErrorMessage(`Failed to open template: ${message.data.filePath}`);
+                            }
+                        }
+                        break;
 					case 'selectFrame':
 						Logger.debug(`Frame selected: ${message.data?.fileName}`);
+						break;
+					case 'reloadDesignFile':
+						// Reload a single file by absolute path and return latest content/metadata
+						this._reloadSingleDesignFile(message.data?.filePath);
 						break;
 					case 'setContextFromCanvas':
 						// Forward context to chat sidebar
@@ -1602,11 +1706,11 @@ class SuperdesignCanvasPanel {
 	public dispose() {
 		SuperdesignCanvasPanel.currentPanel = undefined;
 		
-		// Dispose of file watcher
-		if (this._fileWatcher) {
-			this._fileWatcher.dispose();
-			this._fileWatcher = undefined;
-		}
+        // Dispose of file watchers
+        if (this._fileWatchers && this._fileWatchers.length) {
+            this._fileWatchers.forEach(w => w.dispose());
+            this._fileWatchers = [];
+        }
 		
 		this._panel.dispose();
 		while (this._disposables.length) {
@@ -1623,21 +1727,30 @@ class SuperdesignCanvasPanel {
 			return;
 		}
 
-		// Watch for changes in .superdesign/design_iterations/*.html, *.svg, and *.css
-		const pattern = new vscode.RelativePattern(
-			workspaceFolder, 
-			'.superdesign/design_iterations/**/*.{html,svg,css}'
-		);
+        const iterationsPattern = new vscode.RelativePattern(
+            workspaceFolder,
+            '.superdesign/design_iterations/**/*.{html,svg,css}'
+        );
+        const distPattern = new vscode.RelativePattern(
+            workspaceFolder,
+            '.superdesign/dist/**/*.{html,svg,css}'
+        );
 
-		this._fileWatcher = vscode.workspace.createFileSystemWatcher(
-			pattern,
-			false, // Don't ignore create events
-			false, // Don't ignore change events  
-			false  // Don't ignore delete events
-		);
+        const manifestPattern = new vscode.RelativePattern(
+            workspaceFolder,
+            '.superdesign/dist/manifest.json'
+        );
 
-		// Handle file creation
-		this._fileWatcher.onDidCreate((uri) => {
+        const watchers = [
+            vscode.workspace.createFileSystemWatcher(iterationsPattern, false, false, false),
+            vscode.workspace.createFileSystemWatcher(distPattern, false, false, false),
+            vscode.workspace.createFileSystemWatcher(manifestPattern, false, false, false)
+        ];
+
+        this._fileWatchers = watchers;
+
+        // Handle file creation
+        watchers.forEach(w => w.onDidCreate((uri) => {
 			Logger.debug(`Design file created: ${uri.fsPath}`);
 			this._panel.webview.postMessage({
 				command: 'fileChanged',
@@ -1646,10 +1759,10 @@ class SuperdesignCanvasPanel {
 					changeType: 'created'
 				}
 			});
-		});
+        }));
 
 		// Handle file modification
-		this._fileWatcher.onDidChange((uri) => {
+        watchers.forEach(w => w.onDidChange((uri) => {
 			Logger.debug(`Design file modified: ${uri.fsPath}`);
 			this._panel.webview.postMessage({
 				command: 'fileChanged',
@@ -1658,10 +1771,10 @@ class SuperdesignCanvasPanel {
 					changeType: 'modified'
 				}
 			});
-		});
+        }));
 
 		// Handle file deletion
-		this._fileWatcher.onDidDelete((uri) => {
+        watchers.forEach(w => w.onDidDelete((uri) => {
 			Logger.debug(`Design file deleted: ${uri.fsPath}`);
 			this._panel.webview.postMessage({
 				command: 'fileChanged',
@@ -1670,7 +1783,7 @@ class SuperdesignCanvasPanel {
 					changeType: 'deleted'
 				}
 			});
-		});
+        }));
 	}
 
 	private _update() {
@@ -1727,7 +1840,43 @@ class SuperdesignCanvasPanel {
 			</html>`;
 	}
 
-	private async _loadDesignFiles() {
+	private async _reloadSingleDesignFile(filePath: string) {
+		if (!filePath) {
+			return;
+		}
+		try {
+			const stat = await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+			const contentBuf = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
+			const name = filePath.split(/[/\\]/).pop() || filePath;
+			const fileType = name.toLowerCase().endsWith('.svg') ? 'svg' : 'html';
+			let htmlContent = Buffer.from(contentBuf).toString('utf8');
+			if (fileType === 'html') {
+				const baseDir = vscode.Uri.file(require('path').dirname(filePath));
+				htmlContent = await this._inlineExternalCSS(htmlContent, baseDir);
+			}
+			this._panel.webview.postMessage({
+				command: 'designFileRefreshed',
+				data: {
+					file: {
+						name,
+						path: filePath,
+						content: htmlContent,
+						size: stat.size,
+						modified: new Date(stat.mtime),
+						fileType
+					}
+				}
+			});
+		} catch (error) {
+			Logger.error(`Failed to reload design file ${filePath}: ${error}`);
+			this._panel.webview.postMessage({
+				command: 'error',
+				data: { error: `Failed to reload ${filePath}: ${error}` }
+			});
+		}
+	}
+
+		private async _loadDesignFiles(options?: { source?: 'design_iterations' | 'dist'; kind?: 'pages' | 'components' }) {
 		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 		if (!workspaceFolder) {
 			this._panel.webview.postMessage({
@@ -1738,37 +1887,83 @@ class SuperdesignCanvasPanel {
 		}
 
 		try {
-			const designFolder = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'design_iterations');
+            const source = options?.source === 'dist' ? 'dist' : 'design_iterations';
+            let designFolder: vscode.Uri;
+            if (source === 'dist') {
+                // Choose subdirectory based on kind
+                const base = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist');
+                const sub = options?.kind === 'components' ? ['components'] : ['pages'];
+                designFolder = vscode.Uri.joinPath(base, ...sub);
+            } else {
+                designFolder = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'design_iterations');
+            }
 			
-			// Check if the design_files folder exists
-			try {
-				await vscode.workspace.fs.stat(designFolder);
-			} catch (error) {
-				// Folder doesn't exist, create it
-				try {
-					await vscode.workspace.fs.createDirectory(designFolder);
-					Logger.info('Created .superdesign/design_iterations directory');
-				} catch (createError) {
-					this._panel.webview.postMessage({
-						command: 'error',
-						data: { error: `Failed to create design_files directory: ${createError}` }
-					});
-					return;
+            // Check if the target folder exists
+            try {
+                await vscode.workspace.fs.stat(designFolder);
+            } catch (error) {
+                if (source === 'dist') {
+                    // Don't create dist folders; instruct user to build
+                    this._panel.webview.postMessage({
+                        command: 'error',
+                        data: { error: `No build output found at ${designFolder.fsPath}. Run npm install && npm run build inside .superdesign/builder, then reload the canvas.` }
+                    });
+                    return;
+                } else {
+                    // For design_iterations, create it if missing
+                    try {
+                        await vscode.workspace.fs.createDirectory(designFolder);
+                        Logger.info('Created .superdesign/design_iterations directory');
+                    } catch (createError) {
+                        this._panel.webview.postMessage({
+                            command: 'error',
+                            data: { error: `Failed to create design files directory: ${createError}` }
+                        });
+                        return;
+                    }
+                }
+            }
+
+				// Recursively read files in the directory
+            async function readAllFiles(dir: vscode.Uri): Promise<Array<[vscode.Uri, string]>> {
+                const entries = await vscode.workspace.fs.readDirectory(dir);
+                const results: Array<[vscode.Uri, string]> = [];
+                for (const [name, type] of entries) {
+                    const child = vscode.Uri.joinPath(dir, name);
+                    if (type === vscode.FileType.File) {
+                        const lower = name.toLowerCase();
+                        if (lower.endsWith('.html') || lower.endsWith('.svg')) {
+                            results.push([child, name]);
+                        }
+                    } else if (type === vscode.FileType.Directory) {
+                        const nested = await readAllFiles(child);
+                        results.push(...nested);
+                    }
+                }
+                return results;
+            }
+
+				const fileUrisWithNames = await readAllFiles(designFolder);
+
+				// Try to read build manifest if source is dist
+				let manifest: any | null = null;
+				if (source === 'dist') {
+					try {
+						const manifestUri = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist', 'manifest.json');
+						const buf = await vscode.workspace.fs.readFile(manifestUri);
+						manifest = JSON.parse(Buffer.from(buf).toString('utf8'));
+					} catch (e) {
+						Logger.warn('No manifest.json found under .superdesign/dist; template metadata will be unavailable');
+					}
 				}
-			}
 
-			// Read all files in the directory
-			const files = await vscode.workspace.fs.readDirectory(designFolder);
-			const designFiles = files.filter(([name, type]) => 
-				type === vscode.FileType.File && (
-					name.toLowerCase().endsWith('.html') || 
-					name.toLowerCase().endsWith('.svg')
-				)
-			);
+            // Determine base for relative display names
+            const namingBase = (source === 'dist')
+                ? vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist')
+                : vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'design_iterations');
 
-			const loadedFiles = await Promise.all(
-				designFiles.map(async ([fileName, _]) => {
-					const filePath = vscode.Uri.joinPath(designFolder, fileName);
+				const loadedFiles = await Promise.all(
+                fileUrisWithNames.map(async ([filePath, fileName]) => {
 					
 					try {
 						// Read file stats and content
@@ -1782,16 +1977,39 @@ class SuperdesignCanvasPanel {
 						
 						// For HTML files, inline any external CSS files
 						if (fileType === 'html') {
-							htmlContent = await this._inlineExternalCSS(htmlContent, designFolder);
+                            // Inline CSS relative to the file's directory
+                            const fileDir = vscode.Uri.file(path.dirname(filePath.fsPath));
+                            htmlContent = await this._inlineExternalCSS(htmlContent, fileDir);
 						}
 						
-						return {
-							name: fileName,
+							const relativeName = path
+                            .relative(namingBase.fsPath, filePath.fsPath)
+                            .split(path.sep)
+                            .join('/');
+
+							// Attach templates from manifest if present
+							let templates: any | undefined = undefined;
+							if (manifest && source === 'dist') {
+								try {
+									// Expect manifest to be keyed by relativeName (e.g., pages/home.html)
+									const entry = manifest[relativeName];
+									if (entry && typeof entry === 'object') {
+										const page = entry.page ? { name: String(entry.page.name || entry.page), path: entry.page.path } : null;
+										const components = Array.isArray(entry.components) ? entry.components.map((c: any) => ({ name: String(c.name || c), path: c.path })) : [];
+										const elements = Array.isArray(entry.elements) ? entry.elements.map((el: any) => ({ name: String(el.name || el), path: el.path })) : [];
+										templates = { page, components, elements };
+									}
+								} catch {}
+							}
+
+							return {
+                            name: relativeName || fileName,
 							path: filePath.fsPath,
 							content: htmlContent,
 							size: stat.size,
 							modified: new Date(stat.mtime),
-							fileType
+								fileType,
+								templates
 						};
 					} catch (fileError) {
 						Logger.error(`Failed to read file ${fileName}: ${fileError}`);
@@ -1819,7 +2037,7 @@ class SuperdesignCanvasPanel {
 		}
 	}
 
-	private async _inlineExternalCSS(htmlContent: string, designFolder: vscode.Uri): Promise<string> {
+    private async _inlineExternalCSS(htmlContent: string, baseDir: vscode.Uri): Promise<string> {
 		// Match link tags that reference CSS files
 		const linkRegex = /<link\s+[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
 		let modifiedContent = htmlContent;
@@ -1832,7 +2050,7 @@ class SuperdesignCanvasPanel {
 			try {
 				// Only process relative paths (not absolute URLs)
 				if (!cssFileName.startsWith('http') && !cssFileName.startsWith('//')) {
-					const cssFilePath = vscode.Uri.joinPath(designFolder, cssFileName);
+                    const cssFilePath = vscode.Uri.joinPath(baseDir, cssFileName);
 					
 					// Check if CSS file exists
 					try {

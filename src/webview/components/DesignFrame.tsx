@@ -1,5 +1,6 @@
 import React from 'react';
 import { DesignFile, GridPosition, FrameDimensions, ViewportMode, WebviewMessage } from '../types/canvas.types';
+import { RefreshIcon } from './Icons';
 import { MobileIcon, TabletIcon, DesktopIcon, GlobeIcon } from './Icons';
 
     // Import logo images (handled via webview URIs in context)
@@ -20,7 +21,11 @@ interface DesignFrameProps {
     isDragging?: boolean;
     nonce?: string | null;
     onSendToChat?: (fileName: string, prompt: string) => void;
+    onRefresh?: (filePath: string) => void;
+    vscode?: any;
 }
+
+const DEBUG = false;
 
 const DesignFrame: React.FC<DesignFrameProps> = ({
     file,
@@ -38,6 +43,8 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
     isDragging = false,
     nonce = null,
     onSendToChat
+    , onRefresh
+    , vscode
 }) => {
     const [isLoading, setIsLoading] = React.useState(renderMode === 'iframe');
     const [hasError, setHasError] = React.useState(false);
@@ -59,6 +66,14 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
             setDragPreventOverlay(true);
             
             onDragStart(file.name, position, e);
+        }
+    };
+
+    const handleRefresh = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onRefresh) {
+            onRefresh(file.path);
         }
     };
 
@@ -126,7 +141,7 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
         
         try {
             await navigator.clipboard.writeText(promptText);
-            console.log(`✅ Copied ${platformName} prompt to clipboard for:`, file.name);
+            if (DEBUG) console.log(`✅ Copied ${platformName} prompt to clipboard for:`, file.name);
             
             // Show success state on button
             setCopyButtonState({ text: `Copied for ${platformName}!`, isSuccess: true });
@@ -137,7 +152,7 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
             // Hide dropdown
             setShowCopyDropdown(false);
         } catch (err) {
-            console.error('❌ Failed to copy to clipboard:', err);
+            if (DEBUG) console.error('❌ Failed to copy to clipboard:', err);
             
             // Fallback: create a temporary textarea and copy
             const textarea = document.createElement('textarea');
@@ -147,7 +162,7 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
             document.execCommand('copy');
             document.body.removeChild(textarea);
             
-            console.log(`✅ Copied ${platformName} prompt using fallback method for:`, file.name);
+            if (DEBUG) console.log(`✅ Copied ${platformName} prompt using fallback method for:`, file.name);
             
             // Show success state on button
             setCopyButtonState({ text: `Copied for ${platformName}!`, isSuccess: true });
@@ -163,8 +178,8 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
     const handleCopyDropdownToggle = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        console.log('Dropdown toggle clicked. Current context:', (window as any).__WEBVIEW_CONTEXT__);
-        console.log('Logo URIs available:', (window as any).__WEBVIEW_CONTEXT__?.logoUris);
+        if (DEBUG) console.log('Dropdown toggle clicked. Current context:', (window as any).__WEBVIEW_CONTEXT__);
+        if (DEBUG) console.log('Logo URIs available:', (window as any).__WEBVIEW_CONTEXT__?.logoUris);
         setShowCopyDropdown(!showCopyDropdown);
     };
 
@@ -176,7 +191,7 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
         
         try {
             await navigator.clipboard.writeText(designPath);
-            console.log(`✅ Copied design path to clipboard:`, designPath);
+            if (DEBUG) console.log(`✅ Copied design path to clipboard:`, designPath);
             
             // Show success state on button
             setCopyPathButtonState({ text: 'Copied!', isSuccess: true });
@@ -185,7 +200,7 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
             }, 2000);
             
         } catch (err) {
-            console.error('❌ Failed to copy design path to clipboard:', err);
+            if (DEBUG) console.error('❌ Failed to copy design path to clipboard:', err);
             
             // Fallback: create a temporary textarea and copy
             const textarea = document.createElement('textarea');
@@ -195,7 +210,7 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
             document.execCommand('copy');
             document.body.removeChild(textarea);
             
-            console.log(`✅ Copied design path using fallback method:`, designPath);
+            if (DEBUG) console.log(`✅ Copied design path using fallback method:`, designPath);
             
             // Show success state on button
             setCopyPathButtonState({ text: 'Copied!', isSuccess: true });
@@ -252,7 +267,6 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                         <html>
                         <head>
                             <meta charset="UTF-8">
-                            <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https: http:; img-src 'self' data: blob: https: http: *; font-src 'self' data: https: http: *; style-src 'self' 'unsafe-inline' https: http: *; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: http: *; connect-src 'self' https: http: *;">
                             ${viewportDimensions ? `<meta name="viewport" content="width=${viewportDimensions.width}, height=${viewportDimensions.height}, initial-scale=1.0">` : ''}
                             <style>
                                 body { 
@@ -314,12 +328,12 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                             onLoad={() => {
                                 setIsLoading(false);
                                 setHasError(false);
-                                console.log(`SVG Frame loaded: ${file.name}`);
+                                if (DEBUG) console.log(`SVG Frame loaded: ${file.name}`);
                             }}
                             onError={(e) => {
                                 setIsLoading(false);
                                 setHasError(true);
-                                console.error(`SVG Frame error for ${file.name}:`, e);
+                                if (DEBUG) console.error(`SVG Frame error for ${file.name}:`, e);
                             }}
                         />
                     );
@@ -331,141 +345,19 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                     if (!nonce) return html;
                     return html.replace(/<script/g, `<script nonce="${nonce}"`);
                 };
-
-                // Inject viewport meta tag and CSP if we have viewport dimensions
+                // Inject viewport meta tag if we have viewport dimensions
                 let modifiedContent = file.content;
-                
-                // Use a more permissive CSP that relies on VS Code's built-in security
-                const iframeCSP = `<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https: http:; img-src 'self' data: blob: https: http: *; style-src 'self' 'unsafe-inline' data: https: http: *; script-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https: http: *; connect-src 'self' https: http: *; frame-src 'self' data: blob: https: http: *;">`;
-                
-                // Service worker approach for external resource loading
-                const serviceWorkerScript = `
-                <script${nonce ? ` nonce="${nonce}"` : ''}>
-                    // Register service worker to handle external resources
-                    if ('serviceWorker' in navigator) {
-                        const swCode = \`
-                            self.addEventListener('fetch', event => {
-                                const url = event.request.url;
-                                
-                                // Only handle external image requests
-                                if (url.startsWith('http') && (url.includes('placehold.co') || url.includes('media.giphy.com') || url.match(/\\.(jpg|jpeg|png|gif|svg|webp)$/i))) {
-                                    event.respondWith(
-                                        fetch(event.request, {
-                                            mode: 'cors',
-                                            credentials: 'omit'
-                                        }).catch(() => {
-                                            // Fallback: return a placeholder image
-                                            const canvas = new OffscreenCanvas(200, 120);
-                                            const ctx = canvas.getContext('2d');
-                                            ctx.fillStyle = '#cccccc';
-                                            ctx.fillRect(0, 0, 200, 120);
-                                            ctx.fillStyle = '#000000';
-                                            ctx.font = '16px Arial';
-                                            ctx.textAlign = 'center';
-                                            ctx.fillText('IMAGE', 100, 60);
-                                            
-                                            return canvas.convertToBlob().then(blob => 
-                                                new Response(blob, {
-                                                    headers: { 'Content-Type': 'image/png' }
-                                                })
-                                            );
-                                        })
-                                    );
-                                }
-                            });
-                        \`;
-                        
-                        const blob = new Blob([swCode], { type: 'application/javascript' });
-                        const swUrl = URL.createObjectURL(blob);
-                        
-                        navigator.serviceWorker.register(swUrl).then(registration => {
-                            console.log('Service Worker registered successfully');
-                            
-                            // Wait for service worker to be active
-                            if (registration.active) {
-                                processImages();
-                            } else {
-                                registration.addEventListener('updatefound', () => {
-                                    const newWorker = registration.installing;
-                                    newWorker.addEventListener('statechange', () => {
-                                        if (newWorker.state === 'activated') {
-                                            processImages();
-                                        }
-                                    });
-                                });
-                            }
-                        }).catch(error => {
-                            console.log('Service Worker registration failed, falling back to direct loading');
-                            processImages();
-                        });
-                    } else {
-                        // Fallback for browsers without service worker support
-                        processImages();
-                    }
-                    
-                    function processImages() {
-                        // Force reload all external images to trigger service worker
-                        const images = document.querySelectorAll('img[src]');
-                        images.forEach(img => {
-                            if (img.src.startsWith('http')) {
-                                const originalSrc = img.src;
-                                img.src = '';
-                                setTimeout(() => {
-                                    img.src = originalSrc;
-                                }, 10);
-                            }
-                        });
-                    }
-                    
-                    // Process images when DOM is ready
-                    if (document.readyState === 'loading') {
-                        document.addEventListener('DOMContentLoaded', () => {
-                            setTimeout(processImages, 100);
-                        });
-                    } else {
-                        setTimeout(processImages, 100);
-                    }
-                </script>`;
-                
                 if (viewportDimensions) {
                     const viewportMeta = `<meta name="viewport" content="width=${viewportDimensions.width}, height=${viewportDimensions.height}, initial-scale=1.0">`;
                     if (modifiedContent.includes('<head>')) {
-                        modifiedContent = modifiedContent.replace('<head>', `<head>\n${iframeCSP}\n${viewportMeta}`);
-                        // Inject script before closing body tag
-                        if (modifiedContent.includes('</body>')) {
-                            modifiedContent = modifiedContent.replace('</body>', `${serviceWorkerScript}\n</body>`);
-                        } else {
-                            modifiedContent += serviceWorkerScript;
-                        }
+                        modifiedContent = modifiedContent.replace('<head>', `<head>\n${viewportMeta}`);
                     } else if (modifiedContent.includes('<html>')) {
-                        modifiedContent = modifiedContent.replace('<html>', `<html><head>\n${iframeCSP}\n${viewportMeta}\n</head>`);
-                        if (modifiedContent.includes('</body>')) {
-                            modifiedContent = modifiedContent.replace('</body>', `${serviceWorkerScript}\n</body>`);
-                        } else {
-                            modifiedContent += serviceWorkerScript;
-                        }
+                        modifiedContent = modifiedContent.replace('<html>', `<html><head>\n${viewportMeta}\n</head>`);
                     } else {
-                        modifiedContent = `<head>\n${iframeCSP}\n${viewportMeta}\n</head>\n${modifiedContent}${serviceWorkerScript}`;
+                        modifiedContent = `<head>\n${viewportMeta}\n</head>\n${modifiedContent}`;
                     }
                 } else {
-                    // Even without viewport dimensions, we need to inject CSP and script
-                    if (modifiedContent.includes('<head>')) {
-                        modifiedContent = modifiedContent.replace('<head>', `<head>\n${iframeCSP}`);
-                        if (modifiedContent.includes('</body>')) {
-                            modifiedContent = modifiedContent.replace('</body>', `${serviceWorkerScript}\n</body>`);
-                        } else {
-                            modifiedContent += serviceWorkerScript;
-                        }
-                    } else if (modifiedContent.includes('<html>')) {
-                        modifiedContent = modifiedContent.replace('<html>', `<html><head>\n${iframeCSP}\n</head>`);
-                        if (modifiedContent.includes('</body>')) {
-                            modifiedContent = modifiedContent.replace('</body>', `${serviceWorkerScript}\n</body>`);
-                        } else {
-                            modifiedContent += serviceWorkerScript;
-                        }
-                    } else {
-                        modifiedContent = `<head>\n${iframeCSP}\n</head>\n${modifiedContent}${serviceWorkerScript}`;
-                    }
+                    // No viewport to inject; leave content unchanged
                 }
 
                 // Inject nonce into all script tags
@@ -488,12 +380,12 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                         onLoad={() => {
                             setIsLoading(false);
                             setHasError(false);
-                            console.log(`Frame loaded: ${file.name} (${viewport})`);
+                            if (DEBUG) console.log(`Frame loaded: ${file.name} (${viewport})`);
                         }}
                         onError={(e) => {
                             setIsLoading(false);
                             setHasError(true);
-                            console.error(`Frame error for ${file.name}:`, e);
+                            if (DEBUG) console.error(`Frame error for ${file.name}:`, e);
                         }}
                     />
                 );
@@ -579,6 +471,13 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
         >
             <div className="frame-header">
                 <span className="frame-title">{file.name}</span>
+                <button
+                    className="frame-refresh-btn"
+                    title="Refresh from source"
+                    onClick={handleRefresh}
+                >
+                    <RefreshIcon />
+                </button>
                 
                 {/* Viewport Controls */}
                 {onViewportChange && !useGlobalViewport && (
@@ -627,6 +526,61 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
             </div>
             <div className="frame-content">
                 {renderContent()}
+                {/* Templates dropdown (if template metadata exists) */}
+                {file.templates && (file.templates.page || (file.templates.components && file.templates.components.length) || (file.templates.elements && file.templates.elements.length)) && (
+                    <div className="frame-templates">
+                        <details>
+                            <summary>Templates</summary>
+                            <div className="templates-list">
+                                {file.templates.page && (
+                                    <button
+                                        className="template-link"
+                                        title={file.templates.page.path || ''}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            const target = file.templates?.page?.path;
+                                            if (target && vscode) {
+                                                vscode.postMessage({ command: 'openTemplateFile', data: { filePath: target } });
+                                            }
+                                        }}
+                                    >
+                                        Page: {file.templates.page.name}
+                                    </button>
+                                )}
+                                {(file.templates.components || []).map((c, idx) => (
+                                    <button
+                                        key={`comp-${idx}-${c.name}`}
+                                        className="template-link"
+                                        title={c.path || ''}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (c.path && vscode) {
+                                                vscode.postMessage({ command: 'openTemplateFile', data: { filePath: c.path } });
+                                            }
+                                        }}
+                                    >
+                                        Component: {c.name}
+                                    </button>
+                                ))}
+                                {(file.templates.elements || []).map((el, idx) => (
+                                    <button
+                                        key={`el-${idx}-${el.name}`}
+                                        className="template-link"
+                                        title={el.path || ''}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (el.path && vscode) {
+                                                vscode.postMessage({ command: 'openTemplateFile', data: { filePath: el.path } });
+                                            }
+                                        }}
+                                    >
+                                        Element: {el.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </details>
+                    </div>
+                )}
                 
                 {/* Drag prevention overlay - prevents iframe interaction during drag */}
                 {(dragPreventOverlay || isDragging) && isSelected && renderMode === 'iframe' && (
@@ -702,8 +656,8 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                             onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                console.log('Dropdown toggle clicked. Current context:', (window as any).__WEBVIEW_CONTEXT__);
-                                console.log('Logo URIs available:', (window as any).__WEBVIEW_CONTEXT__?.logoUris);
+                                if (DEBUG) console.log('Dropdown toggle clicked. Current context:', (window as any).__WEBVIEW_CONTEXT__);
+                                if (DEBUG) console.log('Logo URIs available:', (window as any).__WEBVIEW_CONTEXT__?.logoUris);
                                 setShowCopyDropdown(!showCopyDropdown);
                             }}
                             title="Copy file content with reference prompt"
@@ -727,15 +681,15 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                                     className="copy-dropdown-item"
                                     onClick={(e) => handleCopyPrompt(e, 'cursor')}
                                 >
-                                    <img 
+                                    <img
                                         src={(window as any).__WEBVIEW_CONTEXT__?.logoUris?.cursor} 
                                         alt="Cursor" 
                                         className="platform-logo"
                                         onError={(e) => {
-                                            console.error('Failed to load Cursor logo:', (window as any).__WEBVIEW_CONTEXT__?.logoUris?.cursor);
-                                            console.error('Image error event:', e);
+                                            if (DEBUG) console.error('Failed to load Cursor logo:', (window as any).__WEBVIEW_CONTEXT__?.logoUris?.cursor);
+                                            if (DEBUG) console.error('Image error event:', e);
                                         }}
-                                        onLoad={() => console.log('Cursor logo loaded successfully')}
+                                        onLoad={() => DEBUG && console.log('Cursor logo loaded successfully')}
                                     />
                                     <span>Cursor</span>
                                 </button>
@@ -743,15 +697,15 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                                     className="copy-dropdown-item"
                                     onClick={(e) => handleCopyPrompt(e, 'windsurf')}
                                 >
-                                    <img 
+                                    <img
                                         src={(window as any).__WEBVIEW_CONTEXT__?.logoUris?.windsurf} 
                                         alt="Windsurf" 
                                         className="platform-logo"
                                         onError={(e) => {
-                                            console.error('Failed to load Windsurf logo:', (window as any).__WEBVIEW_CONTEXT__?.logoUris?.windsurf);
-                                            console.error('Image error event:', e);
+                                            if (DEBUG) console.error('Failed to load Windsurf logo:', (window as any).__WEBVIEW_CONTEXT__?.logoUris?.windsurf);
+                                            if (DEBUG) console.error('Image error event:', e);
                                         }}
-                                        onLoad={() => console.log('Windsurf logo loaded successfully')}
+                                        onLoad={() => DEBUG && console.log('Windsurf logo loaded successfully')}
                                     />
                                     <span>Windsurf</span>
                                 </button>
@@ -759,15 +713,15 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                                     className="copy-dropdown-item"
                                     onClick={(e) => handleCopyPrompt(e, 'lovable')}
                                 >
-                                    <img 
+                                    <img
                                         src={(window as any).__WEBVIEW_CONTEXT__?.logoUris?.lovable} 
                                         alt="Lovable" 
                                         className="platform-logo"
                                         onError={(e) => {
-                                            console.error('Failed to load Lovable logo:', (window as any).__WEBVIEW_CONTEXT__?.logoUris?.lovable);
-                                            console.error('Image error event:', e);
+                                            if (DEBUG) console.error('Failed to load Lovable logo:', (window as any).__WEBVIEW_CONTEXT__?.logoUris?.lovable);
+                                            if (DEBUG) console.error('Image error event:', e);
                                         }}
-                                        onLoad={() => console.log('Lovable logo loaded successfully')}
+                                        onLoad={() => DEBUG && console.log('Lovable logo loaded successfully')}
                                     />
                                     <span>Lovable</span>
                                 </button>
@@ -775,15 +729,15 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                                     className="copy-dropdown-item"
                                     onClick={(e) => handleCopyPrompt(e, 'bolt')}
                                 >
-                                    <img 
+                                    <img
                                         src={(window as any).__WEBVIEW_CONTEXT__?.logoUris?.bolt} 
                                         alt="Bolt" 
                                         className="platform-logo"
                                         onError={(e) => {
-                                            console.error('Failed to load Bolt logo:', (window as any).__WEBVIEW_CONTEXT__?.logoUris?.bolt);
-                                            console.error('Image error event:', e);
+                                            if (DEBUG) console.error('Failed to load Bolt logo:', (window as any).__WEBVIEW_CONTEXT__?.logoUris?.bolt);
+                                            if (DEBUG) console.error('Image error event:', e);
                                         }}
-                                        onLoad={() => console.log('Bolt logo loaded successfully')}
+                                        onLoad={() => DEBUG && console.log('Bolt logo loaded successfully')}
                                     />
                                     <span>Bolt</span>
                                 </button>
@@ -810,4 +764,25 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
     );
 };
 
-export default DesignFrame; 
+function areDesignFramePropsEqual(prev: Readonly<React.ComponentProps<typeof DesignFrame>>, next: Readonly<React.ComponentProps<typeof DesignFrame>>): boolean {
+    // Compare props that affect rendering/positioning
+    if (prev.isSelected !== next.isSelected) return false;
+    if (prev.isDragging !== next.isDragging) return false;
+    if (prev.renderMode !== next.renderMode) return false;
+    if (prev.useGlobalViewport !== next.useGlobalViewport) return false;
+    if (prev.viewport !== next.viewport) return false;
+    if (prev.dimensions.width !== next.dimensions.width || prev.dimensions.height !== next.dimensions.height) return false;
+    if (prev.position.x !== next.position.x || prev.position.y !== next.position.y) return false;
+    // File identity changes
+    if (prev.file.name !== next.file.name) return false;
+    if (prev.file.path !== next.file.path) return false;
+    if (prev.file.fileType !== next.file.fileType) return false;
+    // Shallow check viewportDimensions
+    if (!!prev.viewportDimensions !== !!next.viewportDimensions) return false;
+    if (prev.viewportDimensions && next.viewportDimensions) {
+        if (prev.viewportDimensions.width !== next.viewportDimensions.width || prev.viewportDimensions.height !== next.viewportDimensions.height) return false;
+    }
+    return true;
+}
+
+export default React.memo(DesignFrame, areDesignFramePropsEqual);

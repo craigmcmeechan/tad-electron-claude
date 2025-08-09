@@ -31,6 +31,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
     const [toolTimers, setToolTimers] = useState<Record<string, number>>({});
     const timerIntervals = useRef<Record<string, NodeJS.Timeout>>({});
 
+    // Template builder state
+    const [showTemplates, setShowTemplates] = useState<boolean>(false);
+    const [templates, setTemplates] = useState<{fileName: string; filePath: string}[]>([]);
+    const [selectedTemplatePath, setSelectedTemplatePath] = useState<string | null>(null);
+    const [selectedTemplateContent, setSelectedTemplateContent] = useState<string>('');
+
     // Helper function to check if we have meaningful conversation messages
     const hasConversationMessages = () => {
         return chatHistory.some(msg => 
@@ -152,12 +158,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
                 } else if (message.command === 'resetWelcome') {
                     // Handle reset welcome command from command palette
                     resetFirstTimeUser();
-                    setShowWelcome(true);
-                    console.log('👋 Welcome screen reset and shown');
+                    // Only show welcome in panel view; keep hidden in sidebar
+                    if (layout !== 'sidebar') {
+                        setShowWelcome(true);
+                        console.log('👋 Welcome screen reset and shown');
+                    }
                 } else if (message.command === 'setChatPrompt') {
                     // Handle prompt from canvas floating buttons
                     console.log('📝 Received prompt from canvas:', message.data.prompt);
                     setInputMessage(message.data.prompt);
+                } else if (message.command === 'openTemplateView') {
+                    // Open template builder panel
+                    console.log('📚 Open template view command received');
+                    setShowTemplates(true);
+                    vscode.postMessage({ command: 'listTemplates' });
                 }
             };
             
@@ -171,6 +185,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
         
         // Delay the check slightly to ensure chat is fully loaded
         const timeoutId = setTimeout(autoOpenCanvas, 500);
+
+        // Request templates list when panel is used
+        if (layout !== 'sidebar') {
+            vscode.postMessage({ command: 'listTemplates' });
+        }
 
         return () => {
             clearTimeout(timeoutId);
@@ -186,13 +205,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
         };
     }, [vscode]);
 
-    // Handle first-time user welcome display
+    // Handle first-time user welcome display (panel only; hide in sidebar)
     useEffect(() => {
-        if (!isCheckingFirstTime && isFirstTime && !hasConversationMessages()) {
+        if (
+            layout !== 'sidebar' &&
+            !isCheckingFirstTime &&
+            isFirstTime &&
+            !hasConversationMessages()
+        ) {
             setShowWelcome(true);
             console.log('👋 Showing welcome for first-time user');
         }
-    }, [isCheckingFirstTime, isFirstTime, chatHistory]);
+    }, [isCheckingFirstTime, isFirstTime, chatHistory, layout]);
 
     // Auto-collapse tools when new messages arrive
     useEffect(() => {
@@ -369,6 +393,37 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
         timerIntervals.current = {};
         
         markAsReturningUser();
+    };
+
+    // Receive template list/content from extension
+    useEffect(() => {
+        const handler = (event: MessageEvent) => {
+            const msg = event.data;
+            if (msg.command === 'templateList') {
+                if (Array.isArray(msg.templates)) {
+                    setTemplates(msg.templates);
+                }
+            } else if (msg.command === 'templateContent') {
+                if (msg.filePath === selectedTemplatePath && typeof msg.content === 'string') {
+                    setSelectedTemplateContent(msg.content);
+                }
+            }
+        };
+        window.addEventListener('message', handler);
+        return () => window.removeEventListener('message', handler);
+    }, [selectedTemplatePath]);
+
+    const openTemplate = (filePath: string) => {
+        setSelectedTemplatePath(filePath);
+        setSelectedTemplateContent('');
+        vscode.postMessage({ command: 'readTemplate', filePath });
+    };
+
+    const insertTemplateIntoInput = () => {
+        if (selectedTemplateContent.trim()) {
+            setInputMessage(prev => (prev ? prev + '\n\n' : '') + selectedTemplateContent.trim());
+            setShowTemplates(false);
+        }
     };
 
     const handleWelcomeGetStarted = () => {
@@ -1327,20 +1382,70 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
                 <header className="chat-header">
                     <h2>💬 Chat</h2>
                     <p>Ask anything about code, design, or development!</p>
-                    <button 
-                        className="new-conversation-btn"
-                        onClick={handleNewConversation}
-                        title="Start a new conversation"
-                        disabled={isLoading}
-                    >
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
-                        </svg>
-                    </button>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        <button 
+                            className="new-conversation-btn"
+                            onClick={() => {
+                                setShowTemplates(prev => !prev);
+                                if (!showTemplates) {
+                                    vscode.postMessage({ command: 'listTemplates' });
+                                }
+                            }}
+                            title="Toggle Template Builder"
+                            disabled={isLoading}
+                        >
+                            📚 Templates
+                        </button>
+                        <button 
+                            className="new-conversation-btn"
+                            onClick={handleNewConversation}
+                            title="Start a new conversation"
+                            disabled={isLoading}
+                        >
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                            </svg>
+                        </button>
+                    </div>
                 </header>
             )}
 
             <div className="chat-container">
+                {layout === 'panel' && showTemplates && (
+                    <div className="template-panel" style={{ borderBottom: '1px solid var(--vscode-panel-border)', padding: '8px 12px', display: 'grid', gridTemplateColumns: '260px 1fr', gap: 12 }}>
+                        <div className="template-list" style={{ maxHeight: 220, overflow: 'auto', borderRight: '1px solid var(--vscode-panel-border)', paddingRight: 12 }}>
+                            <div style={{ fontWeight: 600, marginBottom: 6 }}>Templates in .superdesign</div>
+                            {templates.length === 0 ? (
+                                <div style={{ color: 'var(--vscode-descriptionForeground)' }}>No prompts.*.md found</div>
+                            ) : (
+                                templates.map(t => (
+                                    <button key={t.filePath} className="tool-result__show-more" style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 6 }} onClick={() => openTemplate(t.filePath)}>
+                                        {t.fileName}
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                        <div className="template-content" style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                                <div style={{ fontWeight: 600 }}>{selectedTemplatePath ? selectedTemplatePath.split(/[\\/]/).pop() : 'Select a template'}</div>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <button className="tool-result__show-more" onClick={() => selectedTemplateContent && insertTemplateIntoInput()} disabled={!selectedTemplateContent}>Insert</button>
+                                </div>
+                            </div>
+                            <div style={{ flex: 1, overflow: 'auto', border: '1px solid var(--vscode-panel-border)', borderRadius: 4, padding: 8, background: 'var(--vscode-editor-background)' }}>
+                                {selectedTemplatePath ? (
+                                    selectedTemplateContent ? (
+                                        <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{selectedTemplateContent}</pre>
+                                    ) : (
+                                        <div style={{ color: 'var(--vscode-descriptionForeground)' }}>Loading...</div>
+                                    )
+                                ) : (
+                                    <div style={{ color: 'var(--vscode-descriptionForeground)' }}>Choose a `prompts*.md` to preview</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
                 <div className="chat-history">
                     {showWelcome ? (
                         <Welcome 

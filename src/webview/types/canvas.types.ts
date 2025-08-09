@@ -13,6 +13,12 @@ export interface DesignFile {
     children?: string[];       // Array of child design file names
     generation?: number;       // 0 for root designs, 1 for first children, etc.
     branchIndex?: number;      // Index within the same generation/branch
+    // Optional build manifest template metadata (for dist pages)
+    templates?: {
+        page?: { name: string; path?: string } | null;
+        components?: Array<{ name: string; path?: string }>;
+        elements?: Array<{ name: string; path?: string }>;
+    };
 }
 
 export interface CanvasState {
@@ -63,6 +69,14 @@ export interface SetChatPromptMessage extends ExtensionMessage {
     };
 }
 
+// Request the extension to reload a single design file from source
+export interface ReloadDesignFileMessage extends ExtensionMessage {
+    command: 'reloadDesignFile';
+    data: {
+        filePath: string; // absolute path to the design file
+    };
+}
+
 export interface ErrorMessage extends ExtensionMessage {
     command: 'error';
     data: {
@@ -82,12 +96,17 @@ export type WebviewMessage =
     | LoadDesignFilesMessage 
     | SelectFrameMessage
     | SetContextFromCanvasMessage
-    | SetChatPromptMessage;
+    | SetChatPromptMessage
+    | ReloadDesignFileMessage;
 
 export type ExtensionToWebviewMessage = 
     | DesignFilesLoadedMessage 
     | ErrorMessage 
-    | FileWatchMessage;
+    | FileWatchMessage
+    | {
+        command: 'designFileRefreshed';
+        data: { file: DesignFile };
+    };
 
 // Canvas grid layout types
 export interface GridPosition {

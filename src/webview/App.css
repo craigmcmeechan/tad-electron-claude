@@ -540,6 +540,24 @@
     padding: 1px;
 }
 
+.frame-refresh-btn {
+    background: transparent;
+    border: none;
+    padding: 2px 4px;
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--vscode-foreground);
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 6px;
+}
+
+.frame-refresh-btn:hover {
+    background: var(--vscode-list-hoverBackground);
+}
+
 .frame-viewport-btn {
     background: transparent;
     border: none;
@@ -1098,6 +1116,72 @@
     gap: 2px;
 }
 
+/* Canvas Search */
+.canvas-search-section {
+    position: relative;
+    min-width: 280px;
+}
+
+.canvas-search-input {
+    width: 260px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 4px;
+    border: 1px solid var(--vscode-input-border);
+    background: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    font-size: 12px;
+}
+
+.canvas-search-input:focus {
+    outline: none;
+    border-color: var(--vscode-focusBorder);
+}
+
+.canvas-search-dropdown {
+    position: absolute;
+    top: 30px;
+    left: 12px;
+    width: 260px;
+    max-height: 240px;
+    overflow: auto;
+    background: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 6px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+    z-index: 2000;
+}
+
+.canvas-search-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    background: transparent;
+    border: none;
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    text-align: left;
+}
+
+.canvas-search-item:hover {
+    background: var(--vscode-list-hoverBackground);
+}
+
+.canvas-search-name {
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.canvas-search-type {
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+}
+
 /* Toolbar Buttons */
 .toolbar-btn {
     background: transparent;
@@ -1583,4 +1667,45 @@
 .copy-dropdown-item span {
     flex: 1;
     white-space: nowrap;
+}
+
+/* Templates dropdown inside frame */
+.frame-templates {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 6px;
+    padding: 4px 8px;
+    z-index: 150;
+}
+
+.frame-templates details > summary {
+    cursor: pointer;
+    list-style: none;
+    font-size: 12px;
+    color: #333;
+}
+
+.frame-templates .templates-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.frame-templates .template-link {
+    background: #fff;
+    color: #333;
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.frame-templates .template-link:hover {
+    background: #f5f5f5;
 }

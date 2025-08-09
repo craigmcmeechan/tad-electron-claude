@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import DesignFrame from './DesignFrame';
 import { calculateGridPosition, calculateFitToView, getGridMetrics, generateResponsiveConfig, buildHierarchyTree, calculateHierarchyPositions, getHierarchicalPosition, detectDesignRelationships } from '../utils/gridLayout';
@@ -16,7 +16,7 @@ import {
     LayoutMode,
     HierarchyTree,
     ConnectionLine
-} from '../types/canvas.types';
+    } from '../types/canvas.types';
 import ConnectionLines from './ConnectionLines';
 import {
     ZoomInIcon,
@@ -63,9 +63,11 @@ const CANVAS_CONFIG: CanvasConfig = {
     }
 };
 
+const DEBUG = false;
+
 const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
-    console.log('🎨 CanvasView component starting...');
-    console.log('📞 CanvasView props - vscode:', !!vscode, 'nonce:', nonce);
+    if (DEBUG) console.log('🎨 CanvasView component starting...');
+    if (DEBUG) console.log('📞 CanvasView props - vscode:', !!vscode, 'nonce:', nonce);
     
     const [designFiles, setDesignFiles] = useState<DesignFile[]>([]);
     const [selectedFrames, setSelectedFrames] = useState<string[]>([]);
@@ -85,16 +87,52 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         offset: { x: 0, y: 0 }
     });
     const [layoutMode, setLayoutMode] = useState<LayoutMode>('grid');
+    const [distMode, setDistMode] = useState<'pages' | 'components'>(() => {
+        try {
+            const saved = vscode?.getState?.() || {};
+            return saved?.canvasDistMode || 'pages';
+        } catch {
+            return 'pages';
+        }
+    });
     const [hierarchyTree, setHierarchyTree] = useState<HierarchyTree | null>(null);
     const [showConnections, setShowConnections] = useState(true);
     const transformRef = useRef<ReactZoomPanPinchRef>(null);
+    const rafZoomStateRef = useRef<{ scheduled: boolean; nextScale: number } | null>(null);
+    const savedStateRef = useRef<any>(null);
+    const rafPersistRef = useRef<{ scheduled: boolean; scale: number; x: number; y: number } | null>(null);
+    const dragRafRef = useRef<number | null>(null);
+    const pendingDragPosRef = useRef<GridPosition | null>(null);
+    const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+    const [isTransformReady, setIsTransformReady] = useState<boolean>(false);
+    // Search state
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [showSearchDropdown, setShowSearchDropdown] = useState<boolean>(false);
+    const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-    console.log('✅ CanvasView state initialized successfully');
+    const searchResults = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return [] as DesignFile[];
+        // Simple substring match, rank by start-with first then includes
+        const startsWith: DesignFile[] = [];
+        const includes: DesignFile[] = [];
+        designFiles.forEach(f => {
+            const name = f.name.toLowerCase();
+            if (name.startsWith(q)) {
+                startsWith.push(f);
+            } else if (name.includes(q)) {
+                includes.push(f);
+            }
+        });
+        return [...startsWith, ...includes].slice(0, 25);
+    }, [designFiles, searchQuery]);
+
+    if (DEBUG) console.log('✅ CanvasView state initialized successfully');
     
     // Performance optimization: Switch render modes based on zoom level
-    const getOptimalRenderMode = (_zoom: number): 'placeholder' | 'iframe' => {
-        // Always render iframe as requested by the user
-        return 'iframe';
+    const LOD_IFRAME_THRESHOLD = 0.35; // below this, render placeholders
+    const getOptimalRenderMode = (zoom: number): 'placeholder' | 'iframe' => {
+        return zoom < LOD_IFRAME_THRESHOLD ? 'placeholder' : 'iframe';
     };
 
     // Helper function to transform mouse coordinates to canvas space
@@ -166,6 +204,50 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         }
     };
 
+    // Focus the view on a specific frame by name
+    const focusOnFrame = (fileName: string) => {
+        if (!transformRef.current) return;
+        const wrapper = document.querySelector('.canvas-transform-wrapper') as HTMLElement | null;
+        if (!wrapper) return;
+
+        const index = designFiles.findIndex(f => f.name === fileName);
+        if (index === -1) return;
+
+        const viewportMode = getFrameViewport(fileName);
+        const dims = currentConfig.viewports[viewportMode];
+        const frameWidth = dims.width;
+        const frameHeight = dims.height + 50; // header space
+
+        const position = getFramePosition(fileName, index);
+        const targetCenterX = position.x + frameWidth / 2;
+        const targetCenterY = position.y + frameHeight / 2;
+
+        const containerWidth = wrapper.clientWidth;
+        const containerHeight = wrapper.clientHeight;
+
+        // Compute a scale that fits the frame nicely within the viewport with padding
+        const padFactor = 0.85; // show with some padding
+        const scaleX = (containerWidth * padFactor) / frameWidth;
+        const scaleY = (containerHeight * padFactor) / frameHeight;
+        const desiredScale = Math.min(scaleX, scaleY, 1);
+        const clampedScale = Math.max(currentConfig.minZoom, Math.min(currentConfig.maxZoom, desiredScale));
+
+        const positionX = -(targetCenterX * clampedScale) + containerWidth / 2;
+        const positionY = -(targetCenterY * clampedScale) + containerHeight / 2;
+
+        transformRef.current.setTransform(positionX, positionY, clampedScale);
+        setCurrentZoom(clampedScale);
+        setPan({ x: positionX, y: positionY });
+    };
+
+    const handleSelectFromSearch = (fileName: string) => {
+        setSelectedFrames([fileName]);
+        focusOnFrame(fileName);
+        setShowSearchDropdown(false);
+        // Keep the query for next time, but blur input
+        searchInputRef.current?.blur();
+    };
+
     const toggleGlobalViewport = () => {
         const newUseGlobal = !useGlobalViewport;
         setUseGlobalViewport(newUseGlobal);
@@ -193,9 +275,17 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
     }, []);
 
     useEffect(() => {
+        // Load any previously saved webview state
+        try {
+            savedStateRef.current = vscode?.getState?.() || {};
+        } catch (e) {
+            savedStateRef.current = {};
+        }
+
         // Request design files from extension
-        const loadMessage: WebviewMessage = {
-            command: 'loadDesignFiles'
+        const loadMessage: any = {
+            command: 'loadDesignFiles',
+            data: { source: 'dist', kind: distMode }
         };
         vscode.postMessage(loadMessage);
 
@@ -240,11 +330,35 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                     setHierarchyTree(positionedTree);
                     
                     setIsLoading(false);
-                    
-                    // Auto-center view after files are loaded
+
+                    // Restore previous transform if available; otherwise center
                     setTimeout(() => {
                         if (transformRef.current) {
-                            transformRef.current.resetTransform();
+                            const saved = savedStateRef.current || vscode?.getState?.() || {};
+                            const savedTransform = saved?.canvasTransform;
+                            const savedPositions = saved?.canvasCustomPositions;
+                            if (savedTransform && typeof savedTransform.scale === 'number') {
+                                const sx = typeof savedTransform.positionX === 'number' ? savedTransform.positionX : 0;
+                                const sy = typeof savedTransform.positionY === 'number' ? savedTransform.positionY : 0;
+                                const sc = savedTransform.scale > 0 ? savedTransform.scale : 1;
+                                transformRef.current.setTransform(sx, sy, sc);
+                                setCurrentZoom(sc);
+                                setPan({ x: sx, y: sy });
+                                setIsTransformReady(true);
+                            } else {
+                                transformRef.current.resetTransform();
+                                // Ensure memoized bounds recalc after reset
+                                const ts = transformRef.current?.instance?.transformState;
+                                if (ts) {
+                                    setCurrentZoom(ts.scale);
+                                    setPan({ x: ts.positionX, y: ts.positionY });
+                                }
+                                setIsTransformReady(true);
+                            }
+
+                            if (savedPositions && typeof savedPositions === 'object') {
+                                setCustomPositions(savedPositions as FramePositionState);
+                            }
                         }
                     }, 100);
                     break;
@@ -256,9 +370,23 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
 
                 case 'fileChanged':
                     // Handle file system changes (will implement in Task 2.3)
-                    console.log('File changed:', message.data);
+                    if (DEBUG) console.log('File changed:', message.data);
                     // Re-request files when changes occur
-                    vscode.postMessage({ command: 'loadDesignFiles' });
+                    vscode.postMessage({ command: 'loadDesignFiles', data: { source: 'dist', kind: distMode } });
+                    break;
+
+                case 'designFileRefreshed':
+                    // Update a single design file in place
+                    {
+                        const updated = message.data.file;
+                        setDesignFiles(prev => prev.map(f => (f.path === updated.path ? {
+                            ...f,
+                            content: updated.content,
+                            size: updated.size,
+                            modified: new Date(updated.modified),
+                            fileType: updated.fileType
+                        } : f)));
+                    }
                     break;
             }
         };
@@ -266,6 +394,48 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         window.addEventListener('message', messageHandler);
         return () => window.removeEventListener('message', messageHandler);
     }, [vscode]); // Removed currentConfig dependency to prevent constant re-renders
+
+    // Persist and reload when dist mode changes
+    useEffect(() => {
+        try {
+            const prev = savedStateRef.current || vscode?.getState?.() || {};
+            const next = { ...prev, canvasDistMode: distMode };
+            savedStateRef.current = next;
+            vscode?.setState?.(next);
+        } catch {}
+
+        vscode.postMessage({ command: 'loadDesignFiles', data: { source: 'dist', kind: distMode } });
+    }, [distMode]);
+
+    const persistTransformState = (scale: number, x: number, y: number) => {
+        // Schedule persistence to avoid spamming setState
+        if (!rafPersistRef.current) rafPersistRef.current = { scheduled: false, scale, x, y };
+        rafPersistRef.current.scale = scale;
+        rafPersistRef.current.x = x;
+        rafPersistRef.current.y = y;
+        if (!rafPersistRef.current.scheduled) {
+            rafPersistRef.current.scheduled = true;
+            requestAnimationFrame(() => {
+                const toSave = rafPersistRef.current!;
+                rafPersistRef.current = { ...toSave, scheduled: false };
+                try {
+                    const prev = savedStateRef.current || vscode?.getState?.() || {};
+                    const next = {
+                        ...prev,
+                        canvasTransform: {
+                            scale: toSave.scale,
+                            positionX: toSave.x,
+                            positionY: toSave.y
+                        }
+                    };
+                    savedStateRef.current = next;
+                    vscode?.setState?.(next);
+                } catch (e) {
+                    // ignore persistence errors
+                }
+            });
+        }
+    };
 
     const handleFrameSelect = (fileName: string) => {
         setSelectedFrames([fileName]); // Single selection for now
@@ -312,7 +482,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
     const handleZoomIn = () => {
         if (transformRef.current) {
             const currentState = transformRef.current.instance?.transformState;
-            console.log('🔍 ZOOM IN - Before:', {
+            if (DEBUG) console.log('🔍 ZOOM IN - Before:', {
                 scale: currentState?.scale,
                 positionX: currentState?.positionX,
                 positionY: currentState?.positionY,
@@ -327,7 +497,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
             // Log after zoom (with small delay to capture the change)
             setTimeout(() => {
                 const newState = transformRef.current?.instance?.transformState;
-                console.log('🔍 ZOOM IN - After:', {
+                if (DEBUG) console.log('🔍 ZOOM IN - After:', {
                     scale: newState?.scale,
                     positionX: newState?.positionX,
                     positionY: newState?.positionY,
@@ -342,7 +512,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
     const handleZoomOut = () => {
         if (transformRef.current) {
             const currentState = transformRef.current.instance?.transformState;
-            console.log('🔍 ZOOM OUT - Before:', {
+            if (DEBUG) console.log('🔍 ZOOM OUT - Before:', {
                 scale: currentState?.scale,
                 positionX: currentState?.positionX,
                 positionY: currentState?.positionY,
@@ -354,7 +524,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
             // Log after zoom (with small delay to capture the change)
             setTimeout(() => {
                 const newState = transformRef.current?.instance?.transformState;
-                console.log('🔍 ZOOM OUT - After:', {
+                if (DEBUG) console.log('🔍 ZOOM OUT - After:', {
                     scale: newState?.scale,
                     positionX: newState?.positionX,
                     positionY: newState?.positionY,
@@ -369,7 +539,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
     const handleResetZoom = () => {
         if (transformRef.current) {
             const currentState = transformRef.current.instance?.transformState;
-            console.log('🔍 RESET ZOOM - Before:', {
+            if (DEBUG) console.log('🔍 RESET ZOOM - Before:', {
                 scale: currentState?.scale,
                 positionX: currentState?.positionX,
                 positionY: currentState?.positionY
@@ -379,13 +549,17 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
             
             setTimeout(() => {
                 const newState = transformRef.current?.instance?.transformState;
-                console.log('🔍 RESET ZOOM - After:', {
+                if (DEBUG) console.log('🔍 RESET ZOOM - After:', {
                     scale: newState?.scale,
                     positionX: newState?.positionX,
                     positionY: newState?.positionY
                 });
             }, 50);
         }
+    };
+
+    const handleReloadAll = () => {
+        vscode.postMessage({ command: 'loadDesignFiles', data: { source: 'dist', kind: distMode } });
     };
 
     const handleTransformChange = (ref: ReactZoomPanPinchRef) => {
@@ -398,14 +572,47 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
             return;
         }
         
-        console.log('🔄 TRANSFORM CHANGE:', {
+        if (DEBUG) console.log('🔄 TRANSFORM CHANGE:', {
             scale: state.scale,
             positionX: state.positionX,
             positionY: state.positionY,
             previousScale: currentZoom
         });
-        setCurrentZoom(state.scale);
+        // Throttle setState with RAF
+        if (!rafZoomStateRef.current) rafZoomStateRef.current = { scheduled: false, nextScale: state.scale };
+        rafZoomStateRef.current.nextScale = state.scale;
+        if (!rafZoomStateRef.current.scheduled) {
+            rafZoomStateRef.current.scheduled = true;
+            requestAnimationFrame(() => {
+                if (rafZoomStateRef.current) {
+                    setCurrentZoom(rafZoomStateRef.current.nextScale);
+                    rafZoomStateRef.current.scheduled = false;
+                }
+            });
+        }
+
+        // Persist latest transform
+        persistTransformState(state.scale, state.positionX, state.positionY);
+        setPan({ x: state.positionX, y: state.positionY });
     };
+
+    // Basic viewport culling: determine visible area in canvas space and filter frames
+    const visibleBounds = useMemo(() => {
+        const transformState = transformRef.current?.instance?.transformState;
+        const scale = transformState?.scale || 1;
+        const x = transformState?.positionX || 0;
+        const y = transformState?.positionY || 0;
+        const wrapper = document.querySelector('.canvas-transform-wrapper') as HTMLElement | null;
+        const width = wrapper?.clientWidth || window.innerWidth;
+        const height = wrapper?.clientHeight || window.innerHeight;
+        const left = (-x) / scale;
+        const top = (-y) / scale;
+        const right = left + width / scale;
+        const bottom = top + height / scale;
+        // Add buffer to reduce mount thrash
+        const buffer = 400;
+        return { left: left - buffer, top: top - buffer, right: right + buffer, bottom: bottom + buffer };
+    }, [currentZoom, pan.x, pan.y, dragState.isDragging]);
 
     // Get frame position (custom, hierarchy, or default grid position)
     const getFramePosition = (fileName: string, index: number): GridPosition => {
@@ -484,10 +691,24 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         };
         
         // Save the new position
-        setCustomPositions(prev => ({
-            ...prev,
-            [dragState.draggedFrame!]: snappedPosition
-        }));
+        setCustomPositions(prev => {
+            const nextPositions = {
+                ...prev,
+                [dragState.draggedFrame!]: snappedPosition
+            } as FramePositionState;
+            try {
+                const prevState = savedStateRef.current || vscode?.getState?.() || {};
+                const nextState = {
+                    ...prevState,
+                    canvasCustomPositions: nextPositions
+                };
+                savedStateRef.current = nextState;
+                vscode?.setState?.(nextState);
+            } catch (e) {
+                // ignore persistence errors
+            }
+            return nextPositions;
+        });
         
         // Reset drag state
         setDragState({
@@ -609,6 +830,53 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         <div className="canvas-container">
             {/* Canvas Controls - Clean Minimal Design */}
             <div className="canvas-toolbar">
+                {/* Search Section */}
+                <div className="toolbar-section canvas-search-section">
+                    <div className="control-group">
+                        <input
+                            ref={searchInputRef}
+                            type="text"
+                            className="canvas-search-input"
+                            placeholder={`Search ${distMode === 'pages' ? 'pages' : 'components'}...`}
+                            value={searchQuery}
+                            onChange={(e) => {
+                                setSearchQuery(e.target.value);
+                                setShowSearchDropdown(true);
+                            }}
+                            onFocus={() => setShowSearchDropdown(true)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && searchResults.length > 0) {
+                                    handleSelectFromSearch(searchResults[0].name);
+                                } else if (e.key === 'Escape') {
+                                    setShowSearchDropdown(false);
+                                    (e.target as HTMLInputElement).blur();
+                                }
+                            }}
+                        />
+                    </div>
+                    {showSearchDropdown && searchResults.length > 0 && (
+                        <div
+                            className="canvas-search-dropdown"
+                            onMouseDown={(e) => {
+                                // Prevent input blur before click
+                                e.preventDefault();
+                            }}
+                        >
+                            {searchResults.map(file => (
+                                <button
+                                    key={file.name}
+                                    className="canvas-search-item"
+                                    title={file.path}
+                                    onClick={() => handleSelectFromSearch(file.name)}
+                                >
+                                    <span className="canvas-search-name">{file.name}</span>
+                                    <span className="canvas-search-type">{file.fileType.toUpperCase()}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
                 {/* Navigation Section */}
                 <div className="toolbar-section">
                 <div className="control-group">
@@ -626,6 +894,9 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                             <HomeIcon />
                         </button>
                         <button className="toolbar-btn" onClick={handleResetPositions} title="Reset Frame Positions">
+                            <RefreshIcon />
+                        </button>
+                        <button className="toolbar-btn" onClick={handleReloadAll} title="Reload All from Source">
                             <RefreshIcon />
                         </button>
                     </div>
@@ -660,6 +931,28 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                 <LinkIcon />
                     </button>
                         )}
+                    </div>
+                </div>
+
+                {/* Dist Source Section */}
+                <div className="toolbar-section">
+                    <div className="control-group">
+                        <div className="layout-toggle">
+                            <button
+                                className={`toggle-btn ${distMode === 'pages' ? 'active' : ''}`}
+                                onClick={() => setDistMode('pages')}
+                                title="Show built Pages (.superdesign/dist/pages)"
+                            >
+                                Pages
+                            </button>
+                            <button
+                                className={`toggle-btn ${distMode === 'components' ? 'active' : ''}`}
+                                onClick={() => setDistMode('components')}
+                                title="Show built Components (.superdesign/dist/components)"
+                            >
+                                Components
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -739,12 +1032,12 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                     
                     // Check for invalid scale and fix it
                     if (state.scale <= 0) {
-                        console.error('🚨 ZOOM EVENT - Invalid scale:', state.scale, '- Fixing...');
+                        if (DEBUG) console.error('🚨 ZOOM EVENT - Invalid scale:', state.scale, '- Fixing...');
                         ref.setTransform(state.positionX, state.positionY, 0.1);
                         return;
                     }
                     
-                    console.log('📏 ZOOM EVENT:', {
+                    if (DEBUG) console.log('📏 ZOOM EVENT:', {
                         scale: state.scale,
                         positionX: state.positionX,
                         positionY: state.positionY,
@@ -752,7 +1045,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                     });
                 }}
                 onPanning={(ref) => {
-                    console.log('👆 PAN EVENT:', {
+                    if (DEBUG) console.log('👆 PAN EVENT:', {
                         scale: ref.state.scale,
                         positionX: ref.state.positionX,
                         positionY: ref.state.positionY,
@@ -760,7 +1053,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                     });
                 }}
                 onZoomStart={(ref) => {
-                    console.log('🔍 ZOOM START:', {
+                    if (DEBUG) console.log('🔍 ZOOM START:', {
                         scale: ref.state.scale,
                         positionX: ref.state.positionX,
                         positionY: ref.state.positionY,
@@ -768,7 +1061,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                     });
                 }}
                 onZoomStop={(ref) => {
-                    console.log('🔍 ZOOM STOP:', {
+                    if (DEBUG) console.log('🔍 ZOOM STOP:', {
                         scale: ref.state.scale,
                         positionX: ref.state.positionX,
                         positionY: ref.state.positionY,
@@ -786,7 +1079,16 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                             if (dragState.isDragging) {
                                 const rect = e.currentTarget.getBoundingClientRect();
                                 const mousePos = transformMouseToCanvasSpace(e.clientX, e.clientY, rect);
-                                handleDragMove(mousePos);
+                                // Throttle drag updates via RAF
+                                pendingDragPosRef.current = mousePos;
+                                if (dragRafRef.current === null) {
+                                    dragRafRef.current = requestAnimationFrame(() => {
+                                        if (pendingDragPosRef.current) {
+                                            handleDragMove(pendingDragPosRef.current);
+                                        }
+                                        dragRafRef.current = null;
+                                    });
+                                }
                             }
                         }}
                         onMouseUp={handleDragEnd}
@@ -808,7 +1110,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                         {/* Connection Lines (render behind frames) */}
                         {layoutMode === 'hierarchy' && hierarchyTree && showConnections && (
                             <ConnectionLines
-                                connections={updateConnectionPositions(hierarchyTree.connections, designFiles)}
+                                connections={useMemo(() => updateConnectionPositions(hierarchyTree.connections, designFiles), [hierarchyTree.connections, designFiles, customPositions, frameViewports, useGlobalViewport, currentConfig, layoutMode])}
                                 containerBounds={hierarchyTree.bounds}
                                 isVisible={showConnections}
                                 zoomLevel={currentZoom}
@@ -830,6 +1132,20 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                 ? dragState.currentPosition 
                                 : position;
                             
+                            // Viewport culling: skip render if outside visible bounds
+                            const frameLeft = finalPosition.x;
+                            const frameTop = finalPosition.y;
+                            const frameRight = frameLeft + actualWidth;
+                            const frameBottom = frameTop + actualHeight;
+                            const isInView = frameRight >= visibleBounds.left && frameLeft <= visibleBounds.right && frameBottom >= visibleBounds.top && frameTop <= visibleBounds.bottom;
+
+                            const computedRenderMode = isTransformReady ? getOptimalRenderMode(currentZoom) : 'placeholder';
+
+                            if (!isInView && computedRenderMode !== 'placeholder') {
+                                // If we're above LOD threshold (would iframe), but offscreen, render nothing
+                                return null;
+                            }
+
                             return (
                                 <DesignFrame
                                     key={file.name}
@@ -838,7 +1154,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                     dimensions={{ width: actualWidth, height: actualHeight }}
                                     isSelected={selectedFrames.includes(file.name)}
                                     onSelect={handleFrameSelect}
-                                    renderMode={getOptimalRenderMode(currentZoom)}
+                                    renderMode={isInView ? computedRenderMode : 'placeholder'}
                                     viewport={frameViewport}
                                     viewportDimensions={viewportDimensions}
                                     onViewportChange={handleFrameViewportChange}
@@ -847,6 +1163,14 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                     isDragging={dragState.isDragging && dragState.draggedFrame === file.name}
                                     nonce={nonce}
                                     onSendToChat={handleSendToChat}
+                                    vscode={vscode}
+                                    onRefresh={(filePath) => {
+                                        const msg: WebviewMessage = {
+                                            command: 'reloadDesignFile',
+                                            data: { filePath }
+                                        } as any;
+                                        vscode.postMessage(msg);
+                                    }}
                                 />
                             );
                         })}

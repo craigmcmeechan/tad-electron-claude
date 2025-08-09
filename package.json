@@ -3,7 +3,8 @@
   "displayName": "superdesign",
   "description": "The 1st Design Agent lives inside your IDE",
   "version": "0.0.11",
-  "publisher": "iganbold",
+  "publisher": "kiraboshi",
+  "author": "kiraboshi",
   "icon": "icon.png",
   "repository": {
     "type": "git",
