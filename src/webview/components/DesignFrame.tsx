@@ -52,7 +52,6 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
     const [hasError, setHasError] = React.useState(false);
     const [dragPreventOverlay, setDragPreventOverlay] = React.useState(false);
     const [showCopyDropdown, setShowCopyDropdown] = React.useState(false);
-    const [showNextDropdown, setShowNextDropdown] = React.useState(false);
     const [copyButtonState, setCopyButtonState] = React.useState<{ text: string; isSuccess: boolean }>({ text: 'Copy prompt', isSuccess: false });
     const [copyPathButtonState, setCopyPathButtonState] = React.useState<{ text: string; isSuccess: boolean }>({ text: 'Copy design path', isSuccess: false });
 
@@ -95,16 +94,12 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                 const el = target.closest('.copy-prompt-dropdown');
                 if (!el) setShowCopyDropdown(false);
             }
-            if (showNextDropdown) {
-                const el = target.closest('.next-rel-dropdown');
-                if (!el) setShowNextDropdown(false);
-            }
         };
-        if (showCopyDropdown || showNextDropdown) {
+        if (showCopyDropdown) {
             document.addEventListener('mousedown', handleClickOutside);
             return () => document.removeEventListener('mousedown', handleClickOutside);
         }
-    }, [showCopyDropdown, showNextDropdown]);
+    }, [showCopyDropdown]);
 
     const handleViewportToggle = (newViewport: ViewportMode) => {
         if (onViewportChange && !useGlobalViewport) {
@@ -593,30 +588,51 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                         </details>
                     </div>
                 )}
-                {/* Relationships dropdown (next) */}
-                {Array.isArray(file.relationships?.next) && file.relationships!.next!.length > 0 && (
-                    <div className="frame-relationships">
-                        <details>
-                            <summary>Next</summary>
-                            <div className="relationships-list">
-                                {file.relationships!.next!.map((rel, idx) => (
-                                    <button
-                                        key={`rel-next-${idx}-${rel}`}
-                                        className="relationship-link"
-                                        title={rel}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            // Ask Canvas to focus on the related frame
-                                            window.postMessage({ __canvasNavigateTo__: rel }, '*');
-                                        }}
-                                    >
-                                        {rel}
-                                    </button>
-                                ))}
-                            </div>
-                        </details>
-                    </div>
-                )}
+                {/* Relationships dropdown (grouped) */}
+                {(() => {
+                    const rel = file.relationships || {};
+                    const children = Array.isArray(file.relationships?.children)
+                        ? file.relationships!.children!
+                        : (Array.isArray(file.children) ? file.children : []);
+                    const groups: Array<{ label: string; items: string[] }> = [
+                        { label: 'Next', items: Array.isArray(rel.next) ? rel.next : [] },
+                        { label: 'Prev', items: Array.isArray(rel.prev) ? rel.prev : [] },
+                        { label: 'Parent', items: Array.isArray(rel.parent) ? rel.parent : [] },
+                        { label: 'Children', items: Array.isArray(children) ? children : [] },
+                        { label: 'Related', items: Array.isArray(rel.related) ? rel.related : [] },
+                    ];
+                    const hasAny = groups.some(g => g.items.length > 0);
+                    if (!hasAny) return null;
+                    return (
+                        <div className="frame-relationships">
+                            <details>
+                                <summary>Relationships</summary>
+                                <div className="relationships-list">
+                                    {groups.map(group => (
+                                        group.items.length > 0 ? (
+                                            <div className="relationships-group" key={`rel-group-${group.label}`}>
+                                                <div className="relationships-heading">{group.label}</div>
+                                                {group.items.map((relItem, idx) => (
+                                                    <button
+                                                        key={`rel-${group.label}-${idx}-${relItem}`}
+                                                        className="relationship-link"
+                                                        title={relItem}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            window.postMessage({ __canvasNavigateTo__: relItem }, '*');
+                                                        }}
+                                                    >
+                                                        {relItem}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        ) : null
+                                    ))}
+                                </div>
+                            </details>
+                        </div>
+                    );
+                })()}
                 
                 {/* Drag prevention overlay - prevents iframe interaction during drag */}
                 {(dragPreventOverlay || isDragging) && isSelected && renderMode === 'iframe' && (
@@ -660,50 +676,6 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                     onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()}
                 >
-                    {/* Next relationships quick action */}
-                    {Array.isArray(file.relationships?.next) && file.relationships!.next!.length > 0 && (
-                        <div className="next-rel-dropdown">
-                            <button
-                                className="floating-action-btn"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    const nexts = file.relationships!.next!;
-                                    if (nexts.length === 1) {
-                                        window.postMessage({ __canvasNavigateTo__: nexts[0] }, '*');
-                                    } else {
-                                        setShowNextDropdown(!showNextDropdown);
-                                    }
-                                }}
-                                title="Navigate to next related page"
-                            >
-                                <svg className="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M5 12h14"/>
-                                    <path d="M13 5l7 7-7 7"/>
-                                </svg>
-                                <span className="btn-text">Next ({file.relationships!.next!.length})</span>
-                            </button>
-                            {showNextDropdown && file.relationships!.next!.length > 1 && (
-                                <div className="copy-dropdown-menu" style={{ minWidth: 220 }}>
-                                    {file.relationships!.next!.map((rel, idx) => (
-                                        <button
-                                            key={`next-dd-${idx}-${rel}`}
-                                            className="copy-dropdown-item"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                window.postMessage({ __canvasNavigateTo__: rel }, '*');
-                                                setShowNextDropdown(false);
-                                            }}
-                                            title={rel}
-                                        >
-                                            <span>{rel}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
                     <button
                         className="floating-action-btn"
                         onClick={handleCreateVariations}

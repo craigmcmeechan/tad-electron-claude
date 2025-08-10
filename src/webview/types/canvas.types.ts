@@ -179,7 +179,7 @@ export interface CanvasConfig {
 }
 
 // New types for hierarchical layout
-export type LayoutMode = 'grid' | 'hierarchy';
+export type LayoutMode = 'grid' | 'hierarchy' | 'relationships';
 
 export interface ConnectionLine {
     id: string;

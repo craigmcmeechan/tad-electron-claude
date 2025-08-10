@@ -125,9 +125,24 @@ export function generateResponsiveConfig(
     } else if (containerWidth < 1800) {
         framesPerRow = 4;
         gridSpacing = 50; // Our default spacing
+    } else if (containerWidth < 2200) {
+        framesPerRow = 5;
+        gridSpacing = 55; // Slightly more breathing room
+    } else if (containerWidth < 2600) {
+        framesPerRow = 6;
+        gridSpacing = 60; // Wider screens
+    } else if (containerWidth < 3000) {
+        framesPerRow = 7;
+        gridSpacing = 60;
+    } else if (containerWidth < 3400) {
+        framesPerRow = 8;
+        gridSpacing = 65;
+    } else if (containerWidth < 3800) {
+        framesPerRow = 9;
+        gridSpacing = 65;
     } else {
-        framesPerRow = 5; // Extra wide screens can fit 5 frames
-        gridSpacing = 60; // Slightly more breathing room
+        framesPerRow = 10; // Cap max grid row length at 10 frames per row
+        gridSpacing = 70;
     }
     
     return {

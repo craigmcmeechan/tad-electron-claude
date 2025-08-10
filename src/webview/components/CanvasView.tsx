@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import DesignFrame from './DesignFrame';
 import { calculateGridPosition, calculateFitToView, getGridMetrics, generateResponsiveConfig, buildHierarchyTree, calculateHierarchyPositions, getHierarchicalPosition, detectDesignRelationships } from '../utils/gridLayout';
+import { buildBaseNodes, computeRelationshipLayout, ViewMode } from '../utils/relationshipLayout';
+import TeleportFrame from './TeleportFrame';
 import { 
     DesignFile, 
     CanvasState, 
@@ -87,6 +89,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         offset: { x: 0, y: 0 }
     });
     const [layoutMode, setLayoutMode] = useState<LayoutMode>('grid');
+    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
     const [distMode, setDistMode] = useState<'pages' | 'components' | 'groups'>(() => {
         try {
             const saved = vscode?.getState?.() || {};
@@ -828,12 +831,47 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         return { left: left - buffer, top: top - buffer, right: right + buffer, bottom: bottom + buffer };
     }, [currentZoom, pan.x, pan.y, dragState.isDragging]);
 
-    // Get frame position (custom, hierarchy, or default grid position)
+    // Relationship layout positions (instances)
+    const relationshipPositions = useMemo(() => {
+        if (layoutMode !== 'relationships') return null;
+        const view: ViewMode = distMode;
+        const baseNodes = buildBaseNodes(designFiles, view);
+        const measure = (baseId: string, kind: 'frame' | 'group') => {
+            if (kind === 'group') {
+                // collapsed groups measured via header size
+                return { width: 300, height: 40 };
+            }
+            const vp = getFrameViewport(baseId);
+            const d = currentConfig.viewports[vp] || currentConfig.viewports['tablet'];
+            return { width: d.width, height: d.height + 50 };
+        };
+        const positions = computeRelationshipLayout(
+            baseNodes,
+            measure,
+            {
+                horizontalGap: currentConfig.hierarchy.horizontalSpacing,
+                verticalGap: currentConfig.hierarchy.verticalSpacing,
+                groupPadding: 8,
+                groupHeader: { width: 300, height: 40 }
+            },
+            { isCollapsed: (instanceId: string) => !!collapsedGroups[instanceId] }
+        );
+        return positions;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [layoutMode, designFiles, distMode, currentConfig, frameViewports, useGlobalViewport, collapsedGroups]);
+
+    // Get frame position (custom, hierarchy, relationships, or default grid)
     const getFramePosition = (fileName: string, index: number): GridPosition => {
         if (customPositions[fileName]) {
             return customPositions[fileName];
         }
         
+        if (layoutMode === 'relationships' && relationshipPositions) {
+            const instId = `${fileName}#i:root`;
+            const pos = relationshipPositions.frames[instId];
+            if (pos) return pos;
+        }
+
         // Use hierarchy layout if in hierarchy mode and tree is available
         if (layoutMode === 'hierarchy' && hierarchyTree) {
             return getHierarchicalPosition(fileName, hierarchyTree);
@@ -1160,6 +1198,13 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                             >
                                 <TreeIcon />
                     </button>
+                            <button 
+                                className={`toggle-btn ${layoutMode === 'relationships' ? 'active' : ''}`}
+                                onClick={() => setLayoutMode('relationships')}
+                                title="Relationships Layout (next → horizontal, children ↓ vertical)"
+                            >
+                                <LinkIcon />
+                            </button>
                         </div>
                         {layoutMode === 'hierarchy' && (
                             <button 
@@ -1422,7 +1467,86 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                 zoomLevel={currentZoom}
                             />
                         )}
-                        {(distMode !== 'groups' ? designFiles : (() => {
+                        {layoutMode === 'relationships' ? (
+                            // Render instances using relationshipPositions
+                            (() => {
+                                const items: Array<{ key: string; file: DesignFile; x: number; y: number; w: number; h: number } > = [];
+                                if (relationshipPositions) {
+                                    for (const baseId in relationshipPositions.frames) {
+                                        const file = designFiles.find(f => f.name === baseId);
+                                        if (!file) continue;
+                                        const basePos = relationshipPositions.frames[baseId];
+                                        const override = customPositions[baseId];
+                                        const pos = override ? override : basePos;
+                                        const vp = getFrameViewport(file.name);
+                                        const d = currentConfig.viewports[vp];
+                                        const w = d.width; const h = d.height + 50;
+                                        items.push({ key: baseId, file, x: pos.x, y: pos.y, w, h });
+                                    }
+                                }
+                                const frames = items.map(({ key, file, x, y, w, h }) => {
+                                    const isForced = forceRenderFrame === key;
+                                    const basePos = { x, y };
+                                    const finalPos = (dragState.isDragging && dragState.draggedFrame === key) ? dragState.currentPosition : basePos;
+                                    const frameLeft = finalPos.x;
+                                    const frameTop = finalPos.y;
+                                    const frameRight = frameLeft + w;
+                                    const frameBottom = frameTop + h;
+                                    const isInView = frameRight >= visibleBounds.left && frameLeft <= visibleBounds.right && frameBottom >= visibleBounds.top && frameTop <= visibleBounds.bottom;
+                                    const frameViewport = getFrameViewport(file.name);
+                                    const viewportDimensions = currentConfig.viewports[frameViewport];
+                                    const computedRenderMode = isTransformReady ? getOptimalRenderMode(currentZoom) : 'placeholder';
+                                    if (!isInView && computedRenderMode !== 'placeholder' && !isForced) return null;
+                                    return (
+                                        <DesignFrame
+                                            key={key}
+                                            file={file}
+                                            position={finalPos}
+                                            dimensions={{ width: w, height: h }}
+                                            isSelected={selectedFrames.includes(key)}
+                                            onSelect={() => handleFrameSelect(key)}
+                                            renderMode={isInView ? computedRenderMode : 'placeholder'}
+                                            viewport={frameViewport}
+                                            viewportDimensions={viewportDimensions}
+                                            onViewportChange={(fn, vp) => handleFrameViewportChange(fn, vp)}
+                                            useGlobalViewport={useGlobalViewport}
+                                            onDragStart={(fn, pos, ev) => handleDragStart(key, pos, ev)}
+                                            isDragging={dragState.isDragging && dragState.draggedFrame === key}
+                                            nonce={nonce}
+                                            onSendToChat={(fn, prompt) => handleSendToChat(fn, prompt)}
+                                            vscode={vscode}
+                                            onRefresh={(filePath) => {
+                                                const msg: WebviewMessage = {
+                                                    command: 'reloadDesignFile',
+                                                    data: { filePath }
+                                                } as any;
+                                                vscode.postMessage(msg);
+                                            }}
+                                        />
+                                    );
+                                });
+                                const teleports = relationshipPositions ? Object.entries(relationshipPositions.teleports).map(([tpId, tp]) => {
+                                    const isInView = (tp.x + tp.width) >= visibleBounds.left && tp.x <= visibleBounds.right && (tp.y + tp.height) >= visibleBounds.top && tp.y <= visibleBounds.bottom;
+                                    if (!isInView) return null;
+                                    const label = tp.targetBaseId;
+                                    return (
+                                        <TeleportFrame
+                                            key={tpId}
+                                            x={tp.x}
+                                            y={tp.y}
+                                            width={tp.width}
+                                            height={tp.height}
+                                            label={label}
+                                            onJump={() => focusOnFrame(tp.targetBaseId)}
+                                        />
+                                    );
+                                }) : null;
+                                return (<>
+                                    {frames}
+                                    {teleports}
+                                </>);
+                            })()
+                        ) : (distMode !== 'groups' ? designFiles : (() => {
                             // Build groups from tags (union of pages/components)
                             const groups: { [tag: string]: DesignFile[] } = {};
                             for (const f of designFiles) {
