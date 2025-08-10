@@ -429,8 +429,9 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
 
             case 'placeholder':
             default:
-                const placeholderIcon = file.fileType === 'svg' ? '🎨' : '🌐';
-                const placeholderHint = file.fileType === 'svg' ? 'SVG Vector Graphics' : 'HTML Design';
+                const resolvedType = (file.fileType ?? (file.name.toLowerCase().endsWith('.svg') ? 'svg' : 'html')) as 'html' | 'svg';
+                const placeholderIcon = resolvedType === 'svg' ? '🎨' : '🌐';
+                const placeholderHint = resolvedType === 'svg' ? 'SVG Vector Graphics' : 'HTML Design';
                 
                 return (
                     <div className="frame-placeholder">
@@ -438,8 +439,8 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                         <p className="placeholder-name">{file.name}</p>
                         <div className="placeholder-meta">
                             <span>{(file.size / 1024).toFixed(1)} KB</span>
-                            <span>{file.modified.toLocaleDateString()}</span>
-                            <span className="file-type">{file.fileType.toUpperCase()}</span>
+                            <span>{(file as any)?.modified && (file as any).modified.toLocaleDateString ? (file as any).modified.toLocaleDateString() : ''}</span>
+                            <span className="file-type">{resolvedType.toUpperCase()}</span>
                         </div>
                         {renderMode === 'placeholder' && (
                             <small className="placeholder-hint">{placeholderHint} - Zoom in to load</small>

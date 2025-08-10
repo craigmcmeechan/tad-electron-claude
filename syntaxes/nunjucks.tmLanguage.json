@@ -16,7 +16,17 @@
           "begin": "\{#",
           "end": "#\}",
           "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.nunjucks" } },
-          "endCaptures": { "0": { "name": "punctuation.definition.comment.end.nunjucks" } }
+          "endCaptures": { "0": { "name": "punctuation.definition.comment.end.nunjucks" } },
+          "patterns": [
+            {
+              "name": "meta.relationship.nunjucks",
+              "match": "@rel\\s+(next|prev|parent|children|related)\\s*:",
+              "captures": {
+                "0": { "name": "keyword.other.relationship.nunjucks" },
+                "1": { "name": "keyword.other.relationship.key.nunjucks" }
+              }
+            }
+          ]
         }
       ]
     },
@@ -29,6 +39,7 @@
           "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.nunjucks" } },
           "endCaptures": { "0": { "name": "punctuation.section.embedded.end.nunjucks" } },
           "patterns": [
+            { "include": "#filters" },
             { "include": "#strings" },
             { "include": "#keywords" },
             { "include": "#numbers" }
@@ -45,10 +56,61 @@
           "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.nunjucks" } },
           "endCaptures": { "0": { "name": "punctuation.section.embedded.end.nunjucks" } },
           "patterns": [
+            { "include": "#importStatements" },
+            { "include": "#nameCaptures" },
             { "include": "#strings" },
             { "include": "#keywords" },
             { "include": "#numbers" }
           ]
+        }
+      ]
+    },
+    "importStatements": {
+      "patterns": [
+        {
+          "name": "meta.statement.include.nunjucks",
+          "begin": "\\b(include|extends)\\b",
+          "beginCaptures": {
+            "1": { "name": "keyword.other.$1.nunjucks" }
+          },
+          "end": "(?=\\-?%\\})",
+          "patterns": [
+            { "name": "string.other.path.nunjucks", "match": "['\"][^'\"]+['\"]" }
+          ]
+        },
+        {
+          "name": "meta.statement.import.nunjucks",
+          "begin": "\\b(import|from)\\b",
+          "beginCaptures": {
+            "1": { "name": "keyword.other.$1.nunjucks" }
+          },
+          "end": "(?=\\-?%\\})",
+          "patterns": [
+            { "name": "string.other.path.nunjucks", "match": "['\"][^'\"]+['\"]" },
+            { "name": "keyword.other.import.nunjucks", "match": "\\bimport\\b" },
+            { "name": "keyword.other.as.nunjucks", "match": "\\bas\\b" },
+            { "name": "entity.name.namespace.nunjucks", "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b" }
+          ]
+        }
+      ]
+    },
+    "nameCaptures": {
+      "patterns": [
+        {
+          "name": "meta.block.name.nunjucks",
+          "match": "\\bblock\\s+(\\w+)",
+          "captures": {
+            "0": { "name": "keyword.control.block.nunjucks" },
+            "1": { "name": "entity.name.section.block.nunjucks" }
+          }
+        },
+        {
+          "name": "meta.macro.name.nunjucks",
+          "match": "\\bmacro\\s+(\\w+)\\s*\\(",
+          "captures": {
+            "0": { "name": "support.function.macro.nunjucks" },
+            "1": { "name": "entity.name.function.macro.nunjucks" }
+          }
         }
       ]
     },
@@ -63,9 +125,30 @@
         { "name": "constant.numeric.nunjucks", "match": "(?<![A-Za-z_])(0x[0-9A-Fa-f]+|[0-9]+(\\.[0-9]+)?)" }
       ]
     },
+    "filters": {
+      "patterns": [
+        {
+          "name": "meta.filter.pipeline.nunjucks",
+          "match": "\\|\\s*([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "0": { "name": "keyword.operator.pipeline.nunjucks" },
+            "1": { "name": "support.function.filter.nunjucks" }
+          }
+        }
+      ]
+    },
     "keywords": {
       "patterns": [
-        { "name": "keyword.control.nunjucks", "match": "\\b(if|else|elif|endif|for|endfor|block|endblock|extends|include|import|from|macro|endmacro|set|endset|filter|endfilter|raw|endraw)\\b" }
+        { "name": "keyword.control.conditional.nunjucks", "match": "\\b(if|elif|else|endif)\\b" },
+        { "name": "keyword.control.loop.nunjucks", "match": "\\b(for|endfor)\\b" },
+        { "name": "keyword.control.block.nunjucks", "match": "\\b(block|endblock)\\b" },
+        { "name": "keyword.other.extends.nunjucks", "match": "\\bextends\\b" },
+        { "name": "keyword.other.include.nunjucks", "match": "\\binclude\\b" },
+        { "name": "keyword.other.import.nunjucks", "match": "\\b(import|from)\\b" },
+        { "name": "support.function.macro.nunjucks", "match": "\\b(macro|endmacro)\\b" },
+        { "name": "keyword.operator.assignment.nunjucks", "match": "\\b(set|endset)\\b" },
+        { "name": "keyword.control.filter.nunjucks", "match": "\\b(filter|endfilter)\\b" },
+        { "name": "keyword.other.raw.nunjucks", "match": "\\b(raw|endraw)\\b" }
       ]
     }
   }

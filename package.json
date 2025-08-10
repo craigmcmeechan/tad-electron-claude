@@ -38,6 +38,7 @@
   "activationEvents": [
     "onCommand:superdesign.helloWorld",
     "onCommand:superdesign.buildTemplates",
+    "onCommand:superdesign.createTemplateSpace",
     "onView:superdesign.chatView",
     "onLanguage:nunjucks"
   ],
@@ -124,6 +125,12 @@
         "title": "Open Settings",
         "category": "Superdesign",
         "icon": "$(settings-gear)"
+      },
+      {
+        "command": "superdesign.createTemplateSpace",
+        "title": "Create Template Space",
+        "category": "Superdesign",
+        "icon": "$(new-folder)"
       }
     ],
     "menus": {
@@ -152,6 +159,13 @@
           "command": "superdesign.clearChat",
           "when": "view == superdesign.chatView",
           "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "superdesign.createTemplateSpace",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation@50"
         }
       ]
     },

@@ -6,6 +6,8 @@ import { NunjucksDefinitionProvider } from './providers/definition';
 import { NunjucksDocumentSymbolProvider } from './providers/symbols';
 import { NunjucksCompletionProvider } from './providers/completion';
 import { NunjucksDiagnostics } from './providers/diagnostics';
+import { NunjucksHoverProvider } from './providers/hover';
+import { NunjucksRelationshipLinkProvider } from './providers/links';
 
 export function activateNunjucks(context: vscode.ExtensionContext) {
   const config = readConfig();
@@ -19,6 +21,8 @@ export function activateNunjucks(context: vscode.ExtensionContext) {
     vscode.languages.registerDefinitionProvider(nunjucksSelector, new NunjucksDefinitionProvider(resolver)),
     vscode.languages.registerDocumentSymbolProvider(nunjucksSelector, new NunjucksDocumentSymbolProvider()),
     vscode.languages.registerCompletionItemProvider(nunjucksSelector, new NunjucksCompletionProvider(index), '"', '\''),
+    vscode.languages.registerHoverProvider(nunjucksSelector, new NunjucksHoverProvider(resolver)),
+    vscode.languages.registerDocumentLinkProvider(nunjucksSelector, new NunjucksRelationshipLinkProvider(resolver)),
     diagnostics
   );
 

@@ -42,7 +42,7 @@ interface CanvasViewProps {
 const CANVAS_CONFIG: CanvasConfig = {
     frameSize: { width: 320, height: 400 }, // Smaller default frame size for better density
     gridSpacing: 50, // Much tighter spacing between frames
-    framesPerRow: 4, // Fit 4 frames per row by default
+    framesPerRow: 10, // Expanded default: 10 frames per row
     minZoom: 0.1,
     maxZoom: 5,
     responsive: {
@@ -196,6 +196,176 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
 
     if (DEBUG) console.log('✅ CanvasView state initialized successfully');
     
+    // Pages view: compute grouped order by numeric prefix (e.g., 1.*, 2.*) with spacer rows and headers between groups
+    type PagesRenderItem =
+        | { _kind: 'file'; _file: DesignFile }
+        | { _kind: 'spacer'; _id: string }
+        | { _kind: 'header'; _id: string; _label: string };
+    const pagesGroupedPlan = useMemo(() => {
+        if (distMode !== 'pages' || layoutMode !== 'grid') return null;
+        const normalize = (n: string) => n.replace(/\\/g, '/');
+        const getBase = (n: string) => {
+            const norm = normalize(n);
+            const parts = norm.split('/');
+            const base = parts[parts.length - 1] || norm;
+            return base.replace(/\.[^.]+$/, '');
+        };
+        const getGroupKey = (f: DesignFile): string | null => {
+            const base = getBase(f.name);
+            const m = base.match(/^(\d+)\./);
+            return m ? m[1] : null;
+        };
+        const groups = new Map<string, DesignFile[]>();
+        const others: DesignFile[] = [];
+        for (const f of designFiles) {
+            const key = getGroupKey(f);
+            if (key) {
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key)!.push(f);
+            } else {
+                others.push(f);
+            }
+        }
+        // Sort each group internally alphanumerically by name
+        for (const arr of groups.values()) arr.sort((a, b) => a.name.localeCompare(b.name));
+        others.sort((a, b) => a.name.localeCompare(b.name));
+        // Order groups numerically by key
+        const numericKeys = Array.from(groups.keys()).sort((a, b) => Number(a) - Number(b));
+        // Build flattened items with a small gap between groups
+        // We will place a header row for each group and ensure the group's frames
+        // start at the left-most position on the next row (no snake effect).
+        const SPACER_ROWS = 0; // rely on header row + row break for separation
+        const items: PagesRenderItem[] = [];
+        const indexMap: Record<string, number> = {};
+        let firstGroup = true;
+        const pushSpacerBlock = (blockId: string) => {
+            const count = (currentConfig.framesPerRow || 10) * SPACER_ROWS;
+            for (let i = 0; i < count; i++) items.push({ _kind: 'spacer', _id: `${blockId}-${i}` });
+        };
+        const pushRowBreak = (blockId: string) => {
+            const fpr = (currentConfig.framesPerRow || 10);
+            const remainder = items.length % fpr;
+            if (remainder === 0) return; // already at row start
+            const need = fpr - remainder;
+            for (let i = 0; i < need; i++) items.push({ _kind: 'spacer', _id: `${blockId}-rb-${i}` });
+        };
+        for (const k of numericKeys) {
+            const arr = groups.get(k)!;
+            if (!firstGroup) pushSpacerBlock(`gap-${k}`);
+            firstGroup = false;
+            // Ensure header starts at left-most column
+            pushRowBreak(`before-head-${k}`);
+            // Header for this group
+            items.push({ _kind: 'header', _id: `head-${k}`, _label: `Group: ${k}` });
+            // Ensure the group's frames begin at the left-most column on the next row
+            pushRowBreak(`after-head-${k}`);
+            for (const f of arr) {
+                indexMap[f.name] = items.length;
+                items.push({ _kind: 'file', _file: f });
+            }
+        }
+        if (others.length > 0) {
+            if (!firstGroup) pushSpacerBlock('gap-others');
+            // Ensure header starts at left-most column
+            pushRowBreak('before-head-others');
+            items.push({ _kind: 'header', _id: `head-others`, _label: 'Group: Others' });
+            // Start others group at left-most column
+            pushRowBreak('after-head-others');
+            for (const f of others) {
+                indexMap[f.name] = items.length;
+                items.push({ _kind: 'file', _file: f });
+            }
+        }
+        return { items, indexMap };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [designFiles, distMode, layoutMode, currentConfig.framesPerRow]);
+
+    // Components view: compute grouped order by top-level folder under components/, with spacer rows and headers between groups
+    type ComponentsRenderItem =
+        | { _kind: 'file'; _file: DesignFile }
+        | { _kind: 'spacer'; _id: string }
+        | { _kind: 'header'; _id: string; _label: string }
+        | { _kind: 'subheader'; _id: string; _label: string };
+    const componentsGroupedPlan = useMemo(() => {
+        if (distMode !== 'components' || layoutMode !== 'grid') return null;
+        const normalize = (n: string) => n.replace(/\\/g, '/');
+        const withoutExt = (n: string) => n.replace(/\.[^.]+$/, '');
+        // Build nested groups: top-level folder -> subfolder (next segment or 'root') -> files
+        const compFiles = designFiles.filter(f => normalize(f.name).startsWith('components/'));
+        const groups = new Map<string, Map<string, DesignFile[]>>();
+        for (const f of compFiles) {
+            const norm = normalize(f.name);
+            const pathNoExt = withoutExt(norm);
+            const afterRoot = pathNoExt.replace(/^components\//, '');
+            const segments = afterRoot.split('/');
+            const top = segments.length > 1 ? segments[0] : 'root';
+            const sub = segments.length > 2 ? segments[1] : (segments.length === 2 ? segments[1] : 'root');
+            if (!groups.has(top)) groups.set(top, new Map<string, DesignFile[]>());
+            const subMap = groups.get(top)!;
+            if (!subMap.has(sub)) subMap.set(sub, []);
+            subMap.get(sub)!.push(f);
+        }
+        // Sort files within each subgroup
+        for (const subMap of groups.values()) {
+            for (const arr of subMap.values()) arr.sort((a, b) => a.name.localeCompare(b.name));
+        }
+        // Order top-level groups alphabetically
+        const topKeys = Array.from(groups.keys()).sort((a, b) => a.localeCompare(b));
+        // We will use header rows and explicit row breaks so subgroups always start at left-most
+        const SPACER_ROWS_TOP = 0;  // spacing handled by row breaks
+        const SPACER_ROWS_SUB = 0;  // spacing handled by row breaks
+        const items: ComponentsRenderItem[] = [];
+        const indexMap: Record<string, number> = {};
+        let isFirstTop = true;
+        const pushSpacerBlock = (blockId: string, rows: number) => {
+            const count = (currentConfig.framesPerRow || 10) * rows;
+            for (let i = 0; i < count; i++) items.push({ _kind: 'spacer', _id: `${blockId}-${i}` });
+        };
+        const pushRowBreak = (blockId: string) => {
+            const fpr = (currentConfig.framesPerRow || 10);
+            const remainder = items.length % fpr;
+            if (remainder === 0) return;
+            const need = fpr - remainder;
+            for (let i = 0; i < need; i++) items.push({ _kind: 'spacer', _id: `${blockId}-rb-${i}` });
+        };
+        for (const top of topKeys) {
+            const subMap = groups.get(top)!;
+            if (!isFirstTop) pushSpacerBlock(`gap-top-${top}`, SPACER_ROWS_TOP);
+            isFirstTop = false;
+            // Ensure header starts at left-most column
+            pushRowBreak(`before-head-${top}`);
+            // Top-level header
+            items.push({ _kind: 'header', _id: `head-${top}`, _label: `Group: ${top}` });
+            // Ensure the top group starts at left-most on next row
+            pushRowBreak(`after-head-${top}`);
+            // Order subgroups alphabetically, keeping 'root' first if present
+            const subKeys = Array.from(subMap.keys()).sort((a, b) => {
+                if (a === 'root' && b !== 'root') return -1;
+                if (b === 'root' && a !== 'root') return 1;
+                return a.localeCompare(b);
+            });
+            let isFirstSub = true;
+            for (const sub of subKeys) {
+                const arr = subMap.get(sub)!;
+                if (!isFirstSub) pushSpacerBlock(`gap-sub-${top}-${sub}`, SPACER_ROWS_SUB);
+                isFirstSub = false;
+                if (sub !== 'root') {
+                    // Ensure subheader starts at left-most column
+                    pushRowBreak(`before-sub-${top}-${sub}`);
+                    items.push({ _kind: 'subheader', _id: `sub-${top}-${sub}`, _label: `Group: ${sub}` });
+                }
+                // Ensure each subgroup starts at left-most on next row (when there is a subheader)
+                if (sub !== 'root') pushRowBreak(`after-sub-${top}-${sub}`);
+                for (const f of arr) {
+                    indexMap[f.name] = items.length;
+                    items.push({ _kind: 'file', _file: f });
+                }
+            }
+        }
+        return { items, indexMap };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [designFiles, distMode, layoutMode, currentConfig.framesPerRow]);
+
     // Memoized connections (must be declared at top level; hooks cannot be inside conditionals)
     const hierarchyConnections: ConnectionLine[] = useMemo(() => {
         if (!hierarchyTree) return [];
@@ -213,6 +383,8 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
             return [];
         }
     }, [designFiles, customPositions, frameViewports, useGlobalViewport, currentConfig, layoutMode]);
+
+    // relationshipsView is declared after relationshipPositions
 
     // Performance optimization: Switch render modes based on zoom level
     const LOD_IFRAME_THRESHOLD = 0.35; // below this, render placeholders
@@ -883,6 +1055,71 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [layoutMode, designFiles, distMode, currentConfig, frameViewports, useGlobalViewport, collapsedGroups]);
 
+    // Build connections for the relationships layout (rendered when layoutMode === 'relationships')
+    const relationshipsView = useMemo(() => {
+        if (layoutMode !== 'relationships') {
+            return { connections: [] as ConnectionLine[], bounds: { width: 0, height: 0 } };
+        }
+        if (!relationshipPositions) {
+            return { connections: [] as ConnectionLine[], bounds: { width: 0, height: 0 } };
+        }
+
+        // Helper to read viewport dims for a frame name
+        const getDims = (fileName: string) => {
+            const vp = getFrameViewport(fileName);
+            const d = currentConfig.viewports[vp];
+            return { w: d.width, h: d.height + 50 };
+        };
+
+        // Rebuild base graph to discover edges (next and children), filtered by current distMode
+        const baseNodes = buildBaseNodes(designFiles, distMode);
+        const connections: ConnectionLine[] = [];
+
+        for (const [fromId, base] of baseNodes.entries()) {
+            const fromPos = relationshipPositions.frames[fromId];
+            if (!fromPos) continue;
+            const fromDims = getDims(fromId);
+            const addEdge = (toId: string, kind: 'next' | 'child') => {
+                const toPos = relationshipPositions.frames[toId];
+                if (!toPos) return;
+                const toDims = getDims(toId);
+                connections.push({
+                    id: `rel:${kind}:${fromId}->${toId}`,
+                    fromFrame: fromId,
+                    toFrame: toId,
+                    fromPosition: { x: fromPos.x + fromDims.w, y: fromPos.y + fromDims.h / 2 },
+                    toPosition: { x: toPos.x, y: toPos.y + toDims.h / 2 },
+                    color: 'var(--vscode-textLink-foreground)',
+                    width: 2
+                });
+            };
+            if (Array.isArray(base.next)) {
+                for (const toId of base.next) addEdge(toId, 'next');
+            }
+            if (Array.isArray(base.children)) {
+                for (const toId of base.children) addEdge(toId, 'child');
+            }
+        }
+
+        // Compute container bounds from positioned frames and their sizes
+        let maxX = 0;
+        let maxY = 0;
+        for (const baseId in relationshipPositions.frames) {
+            const pos = relationshipPositions.frames[baseId];
+            const d = getDims(baseId);
+            maxX = Math.max(maxX, pos.x + d.w + 100);
+            maxY = Math.max(maxY, pos.y + d.h + 100);
+        }
+        for (const tpId in relationshipPositions.teleports) {
+            const tp = relationshipPositions.teleports[tpId];
+            maxX = Math.max(maxX, tp.x + tp.width + 100);
+            maxY = Math.max(maxY, tp.y + tp.height + 100);
+        }
+
+        return { connections, bounds: { width: Math.max(1000, maxX), height: Math.max(1000, maxY) } };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [layoutMode, relationshipPositions, designFiles, distMode, currentConfig, frameViewports, useGlobalViewport]);
+
     // Get frame position (custom, hierarchy, relationships, or default grid)
     const getFramePosition = (fileName: string, index: number): GridPosition => {
         if (customPositions[fileName]) {
@@ -890,8 +1127,8 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         }
         
         if (layoutMode === 'relationships' && relationshipPositions) {
-            const instId = `${fileName}#i:root`;
-            const pos = relationshipPositions.frames[instId];
+            // Relationship layout positions are keyed by baseId (design file name)
+            const pos = relationshipPositions.frames[fileName];
             if (pos) return pos;
         }
 
@@ -900,14 +1137,20 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
             return getHierarchicalPosition(fileName, hierarchyTree);
         }
         
-        // Default grid position calculation
+        // Default grid position calculation (with pages-view grouping support)
         const viewportMode = getFrameViewport(fileName);
         const viewportDimensions = currentConfig.viewports[viewportMode];
         const actualWidth = viewportDimensions.width;
         const actualHeight = viewportDimensions.height + 50;
-        
-        const col = index % currentConfig.framesPerRow;
-        const row = Math.floor(index / currentConfig.framesPerRow);
+        // When in pages view with grouping, prefer the computed render index
+        let effectiveIndex = index;
+        if (distMode === 'pages' && layoutMode === 'grid' && pagesGroupedPlan && typeof pagesGroupedPlan.indexMap[fileName] === 'number') {
+            effectiveIndex = pagesGroupedPlan.indexMap[fileName];
+        } else if (distMode === 'components' && layoutMode === 'grid' && componentsGroupedPlan && typeof componentsGroupedPlan.indexMap[fileName] === 'number') {
+            effectiveIndex = componentsGroupedPlan.indexMap[fileName];
+        }
+        const col = effectiveIndex % currentConfig.framesPerRow;
+        const row = Math.floor(effectiveIndex / currentConfig.framesPerRow);
         
         const x = col * (Math.max(actualWidth, currentConfig.frameSize.width) + currentConfig.gridSpacing);
         const y = row * (Math.max(actualHeight, currentConfig.frameSize.height) + currentConfig.gridSpacing);
@@ -1044,11 +1287,43 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         const conns: ConnectionLine[] = [];
         // Only consider pages relationships
         const pageFiles = designFiles.filter(f => f.name.startsWith('pages/'));
-        const mapByName = new Map(pageFiles.map(f => [f.name, f] as const));
+
+        // Normalizer: unify slashes and drop extensions for robust matching
+        const normalizePath = (p: string | undefined | null): string => {
+            if (!p) return '';
+            const withoutQuery = String(p).split('?')[0];
+            const withSlashes = withoutQuery.replace(/\\/g, '/');
+            const withoutDotSlash = withSlashes.replace(/^\.\//, '');
+            // Drop extension (e.g., .njk, .html)
+            return withoutDotSlash.replace(/\.[^.\/]+$/, '');
+        };
+
+        // Index by dist name (full) and normalized dist base (without extension)
+        const byExactName = new Map(pageFiles.map(f => [f.name, f] as const));
+        const byNormalizedDist = new Map(pageFiles.map(f => [normalizePath(f.name), f] as const));
+        // Index by original template path if available (normalized)
+        const byTemplatePath = new Map(
+            pageFiles
+                .map(f => (f.templates?.page?.path ? [normalizePath(f.templates.page.path), f] as const : null))
+                .filter((x): x is readonly [string, typeof pageFiles[number]] => !!x)
+        );
+
+        const resolveTargetToFile = (target: string): typeof pageFiles[number] | undefined => {
+            // Try exact dist name first
+            let match = byExactName.get(target);
+            if (match) return match;
+            // Try normalized (drop extension)
+            match = byNormalizedDist.get(normalizePath(target));
+            if (match) return match;
+            // Try original template path mapping (e.g., pages/foo.njk)
+            match = byTemplatePath.get(normalizePath(target));
+            return match;
+        };
+
         for (const file of pageFiles) {
-            const nexts = file.relationships?.next || [];
+            const nexts = Array.isArray(file.relationships?.next) ? file.relationships!.next! : [];
             for (const target of nexts) {
-                const toFile = mapByName.get(target);
+                const toFile = resolveTargetToFile(target);
                 if (!toFile) continue;
                 conns.push({
                     id: `next:${file.name}->${toFile.name}`,
@@ -1226,8 +1501,8 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                 </div>
                 <div className="canvas-empty">
                     <div className="empty-state">
-                        <h3>No design files found in <code>.superdesign/design_iterations/</code></h3>
-                        <p>Prompt Superdesign or your preferred AI tool to design UI like <kbd>Help me design a calculator UI</kbd> and preview the UI here</p>
+                        <h3>No files found in <code>.superdesign/dist/space</code></h3>
+                        <p>Add built pages/components to <code>.superdesign/dist/space</code> and reload.</p>
                     </div>
                 </div>
             </div>
@@ -1713,11 +1988,31 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                     );
                                 }) : null;
                                 return (<>
+                                    {/* Relationship connections (next → and children ↓) */}
+                                    {relationshipsView.connections && relationshipsView.connections.length > 0 && (
+                                        <ConnectionLines
+                                            connections={relationshipsView.connections}
+                                            containerBounds={relationshipsView.bounds}
+                                            isVisible={true}
+                                            zoomLevel={currentZoom}
+                                        />
+                                    )}
                                     {frames}
                                     {teleports}
                                 </>);
                             })()
-                        ) : (distMode !== 'groups' ? designFiles : (() => {
+                        ) : (distMode !== 'groups' ? (() => {
+                            // Use grouped plans for pages/components when available (grid layout)
+                            if (layoutMode === 'grid') {
+                                if (distMode === 'pages' && pagesGroupedPlan && Array.isArray(pagesGroupedPlan.items)) {
+                                    return pagesGroupedPlan.items as any[];
+                                }
+                                if (distMode === 'components' && componentsGroupedPlan && Array.isArray(componentsGroupedPlan.items)) {
+                                    return componentsGroupedPlan.items as any[];
+                                }
+                            }
+                            return designFiles as any[];
+                        })() : (() => {
                             // Build groups from tags (union of pages/components)
                             const groups: { [tag: string]: DesignFile[] } = {};
                             for (const f of designFiles) {
@@ -1737,18 +2032,31 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                             // Map to pseudo design files with injected positions later
                             // We'll render headers as special frames
                             return flattened;
-                        })()).map((item, index) => {
+                        })()).map((item, index, arr) => {
                             if (distMode === 'groups') {
                                 const g = item as any;
                                 if (g._kind === 'group') {
                                     // Render group label as a sticky header frame placeholder
-                                    const position = getFramePosition(`__group__${g._tag}`, index);
-                                    const dims = { width: 300, height: 40 };
+                                    // Place group label slightly above the first file in the tag group
+                                    const dims = { width: 380, height: 56 };
+                                    let firstInGroup: DesignFile | null = null;
+                                    for (let k = index + 1; k < arr.length; k++) {
+                                        const next: any = arr[k];
+                                        if (next && next._kind === 'file' && next._tag === g._tag && next._file) {
+                                            firstInGroup = next._file as DesignFile;
+                                            break;
+                                        }
+                                    }
+                                    const basePos = getFramePosition(`__group__${g._tag}`, index);
+                                    const PADDING_Y = 8;
+                                    const labelPos = firstInGroup
+                                        ? { x: getFramePosition(firstInGroup.name, index).x, y: getFramePosition(firstInGroup.name, index).y - (dims.height + PADDING_Y) }
+                                        : basePos;
                                     return (
                                         <div
                                             key={`group-${g._tag}-${index}`}
                                             className="group-label"
-                                            style={{ position: 'absolute', left: position.x, top: position.y, width: dims.width, height: dims.height }}
+                                            style={{ position: 'absolute', left: labelPos.x, top: labelPos.y, width: dims.width, height: dims.height }}
                                         >
                                             <div className="group-label-badge">Group: {g._tag}</div>
                                         </div>
@@ -1798,8 +2106,48 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                     />
                                 );
                             }
-                            // Default pages/components rendering
-                            const file = item as any as DesignFile;
+                            // Default pages/components rendering (with group headers/spacers support)
+                            if ((distMode === 'pages' || distMode === 'components') && layoutMode === 'grid') {
+                                const itm: any = item as any;
+                                if (itm && itm._kind === 'spacer') {
+                                    // Occupy grid slot without visible content
+                                    const position = getFramePosition(`__spacer__${itm._id}`, index);
+                                    return (
+                                        <div key={`spacer-${itm._id}-${index}`} style={{ position: 'absolute', left: position.x, top: position.y, width: 1, height: 1 }} />
+                                    );
+                                }
+                                if (itm && (itm._kind === 'header' || itm._kind === 'subheader')) {
+                                    // Position label slightly above the first file in this group
+                                    let nextFile: DesignFile | null = null;
+                                    for (let j = index + 1; j < arr.length; j++) {
+                                        const candidate: any = arr[j];
+                                        if (candidate && candidate._kind === 'file' && candidate._file) {
+                                            nextFile = candidate._file as DesignFile;
+                                            break;
+                                        }
+                                    }
+                                    if (!nextFile) return null;
+                                    const firstPos = getFramePosition(nextFile.name, index);
+                                    const dims = itm._kind === 'header' ? { width: 380, height: 56 } : { width: 300, height: 40 };
+                                    const PADDING_Y = 8;
+                                    const labelLeft = firstPos.x;
+                                    const labelTop = firstPos.y - (dims.height + PADDING_Y);
+                                    return (
+                                        <div
+                                            key={`${itm._kind}-${itm._id}-${index}`}
+                                            className="group-label"
+                                            style={{ position: 'absolute', left: labelLeft, top: labelTop, width: dims.width, height: dims.height }}
+                                        >
+                                            <div className="group-label-badge">{itm._label}</div>
+                                        </div>
+                                    );
+                                }
+                            }
+                            // Unwrap grouped plan items to get the real DesignFile
+                            const maybe = item as any;
+                            const file: DesignFile = (maybe && maybe._kind === 'file' && maybe._file)
+                                ? (maybe._file as DesignFile)
+                                : (item as DesignFile);
                             const isForced = forceRenderFrame === file.name;
                             const frameViewport = getFrameViewport(file.name);
                             const viewportDimensions = currentConfig.viewports[frameViewport];

@@ -109,40 +109,24 @@ export function generateResponsiveConfig(
     baseConfig: CanvasConfig,
     containerWidth: number
 ): CanvasConfig {
-    // Adjust frames per row based on container width (optimized for more frames)
+    // Adjust frames per row based on container width
+    // New baseline: prefer 10-wide grids for desktop widths
     let framesPerRow = baseConfig.framesPerRow;
     let gridSpacing = baseConfig.gridSpacing;
-    
+
     if (containerWidth < 600) {
         framesPerRow = 1;
         gridSpacing = 30; // Tight spacing on mobile
     } else if (containerWidth < 900) {
         framesPerRow = 2;
         gridSpacing = 40; // Moderate spacing on tablet
-    } else if (containerWidth < 1300) {
+    } else if (containerWidth < 1200) {
         framesPerRow = 3;
-        gridSpacing = 45; // Good spacing for medium screens
-    } else if (containerWidth < 1800) {
-        framesPerRow = 4;
-        gridSpacing = 50; // Our default spacing
-    } else if (containerWidth < 2200) {
-        framesPerRow = 5;
-        gridSpacing = 55; // Slightly more breathing room
-    } else if (containerWidth < 2600) {
-        framesPerRow = 6;
-        gridSpacing = 60; // Wider screens
-    } else if (containerWidth < 3000) {
-        framesPerRow = 7;
-        gridSpacing = 60;
-    } else if (containerWidth < 3400) {
-        framesPerRow = 8;
-        gridSpacing = 65;
-    } else if (containerWidth < 3800) {
-        framesPerRow = 9;
-        gridSpacing = 65;
+        gridSpacing = 45; // Medium screens
     } else {
-        framesPerRow = 10; // Cap max grid row length at 10 frames per row
-        gridSpacing = 70;
+        // Default to 10 columns on typical desktop widths and above
+        framesPerRow = Math.max(10, baseConfig.framesPerRow);
+        gridSpacing = 50;
     }
     
     return {

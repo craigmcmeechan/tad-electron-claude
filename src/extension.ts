@@ -1386,6 +1386,95 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.executeCommand('workbench.action.openSettings', '@ext:iganbold.superdesign');
 	});
 
+    // Register: Create Template Space (optionally from Explorer context)
+    const createTemplateSpaceDisposable = vscode.commands.registerCommand('superdesign.createTemplateSpace', async (resource?: vscode.Uri) => {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('No workspace folder found. Please open a workspace first.');
+            return;
+        }
+
+        try {
+            // Ask for space name
+            const spaceName = await vscode.window.showInputBox({
+                title: 'Create Template Space',
+                prompt: 'Enter a name for the template space',
+                placeHolder: 'e.g., docs, marketing, app-ui',
+                validateInput: (v) => !v || !v.trim() ? 'Name is required' : undefined
+            });
+            if (!spaceName) return;
+
+            // Determine template root: if invoked from Explorer on a folder, use it as the root; else default under .superdesign/templates/<spaceName>
+            const isDirectory = async (uri: vscode.Uri) => {
+                try { const stat = await vscode.workspace.fs.stat(uri); return stat.type === vscode.FileType.Directory; } catch { return false; }
+            };
+
+            let templateRootUri: vscode.Uri | null = null;
+            if (resource && await isDirectory(resource)) {
+                templateRootUri = resource;
+            } else {
+                templateRootUri = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'templates', spaceName);
+            }
+
+            // Ensure template root and standard subfolders
+            const subdirs = ['pages', 'components', 'elements', 'styles'];
+            await vscode.workspace.fs.createDirectory(templateRootUri);
+            for (const dir of subdirs) {
+                await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(templateRootUri, dir));
+            }
+
+            // Create a minimal starter page if not present
+            const starterPage = vscode.Uri.joinPath(templateRootUri, 'pages', 'index.njk');
+            try { await vscode.workspace.fs.stat(starterPage); } catch {
+                const starter = Buffer.from(`<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="utf-8"/>\n  <title>${spaceName} — Home</title>\n  <link rel="stylesheet" href="/design-system.css" />\n</head>\n<body>\n  <h1>${spaceName} — Home</h1>\n  <p>Welcome to your new Superdesign template space.</p>\n</body>\n</html>\n`, 'utf8');
+                await vscode.workspace.fs.writeFile(starterPage, starter);
+            }
+
+            // Default dist directory: .superdesign/dist/<spaceName>
+            const distDirUri = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist', spaceName);
+            await vscode.workspace.fs.createDirectory(distDirUri);
+
+            // Compute workspace-relative paths for spaces.json
+            const relPath = (abs: vscode.Uri) => {
+                const rootFs = workspaceFolder.uri.fsPath;
+                const p = abs.fsPath;
+                const rel = path.relative(rootFs, p).split(path.sep).join('/');
+                return rel.startsWith('.') ? rel : `./${rel}`;
+            };
+            const templateRootRel = relPath(templateRootUri);
+            const distDirRel = relPath(distDirUri);
+
+            // Read/update .superdesign/spaces.json
+            const spacesJsonUri = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'spaces.json');
+            let spacesObj: any = undefined;
+            try {
+                const buf = await vscode.workspace.fs.readFile(spacesJsonUri);
+                spacesObj = JSON.parse(Buffer.from(buf).toString('utf8'));
+            } catch {
+                spacesObj = { defaultSpace: spaceName, spaces: [] };
+            }
+            if (!spacesObj || typeof spacesObj !== 'object') spacesObj = { defaultSpace: spaceName, spaces: [] };
+            if (!Array.isArray(spacesObj.spaces)) spacesObj.spaces = [];
+
+            const existingIdx = spacesObj.spaces.findIndex((s: any) => String(s?.name || '') === spaceName);
+            if (existingIdx >= 0) {
+                // Update existing entry
+                spacesObj.spaces[existingIdx] = { name: spaceName, templateRoot: templateRootRel, distDir: distDirRel };
+            } else {
+                spacesObj.spaces.push({ name: spaceName, templateRoot: templateRootRel, distDir: distDirRel });
+                if (!spacesObj.defaultSpace) spacesObj.defaultSpace = spaceName;
+            }
+
+            const pretty = Buffer.from(JSON.stringify(spacesObj, null, 2), 'utf8');
+            await vscode.workspace.fs.writeFile(spacesJsonUri, pretty);
+
+            vscode.window.showInformationMessage(`✅ Created template space "${spaceName}" at ${templateRootRel}.`);
+        } catch (e) {
+            Logger.error(`Failed to create template space: ${e}`);
+            vscode.window.showErrorMessage(`Failed to create template space: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    });
+
     // Register sync builder command: write packaged builder into working directory
     const syncBuilderDisposable = vscode.commands.registerCommand('superdesign.syncBuilder', async () => {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -1676,6 +1765,7 @@ export function activate(context: vscode.ExtensionContext) {
 		resetWelcomeDisposable,
 		initializeProjectDisposable,
 		openSettingsDisposable,
+		createTemplateSpaceDisposable,
 		buildTemplatesDisposable,
 		syncBuilderDisposable,
 		openTemplateViewDisposable,
@@ -2259,11 +2349,14 @@ class SuperdesignCanvasPanel {
 			
             // Check if the target folder exists
             if (options?.kind === 'groups' && source === 'dist') {
-                // For groups, ensure at least base dist exists; we will read from both pages and components
-                const baseDist = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist');
-                try {
-                    await vscode.workspace.fs.stat(baseDist);
-                } catch (error) {
+                // For groups, ensure at least one of pages/components exists within the selected space's dist directory
+                const baseDist = distBaseDir || vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist');
+                const pagesDir = vscode.Uri.joinPath(baseDist, 'pages');
+                const componentsDir = vscode.Uri.joinPath(baseDist, 'components');
+                let hasAny = false;
+                try { await vscode.workspace.fs.stat(pagesDir); hasAny = true; } catch {}
+                try { await vscode.workspace.fs.stat(componentsDir); hasAny = hasAny || true; } catch {}
+                if (!hasAny) {
                     this._panel.webview.postMessage({
                         command: 'error',
                         data: { error: `No build output found at ${baseDist.fsPath}. Use the "Build Templates (Superdesign)" command to generate build output (this will auto-seed a builder if bundled).` }
@@ -2318,8 +2411,8 @@ class SuperdesignCanvasPanel {
 
                 let fileUrisWithNames: Array<[vscode.Uri, string]> = [];
                 if (options?.kind === 'groups' && source === 'dist') {
-                    // Read from both pages and components
-                    const base = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist');
+                    // Read from both pages and components within the selected space's dist directory
+                    const base = distBaseDir || vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist');
                     const pagesDir = vscode.Uri.joinPath(base, 'pages');
                     const componentsDir = vscode.Uri.joinPath(base, 'components');
                     try {
