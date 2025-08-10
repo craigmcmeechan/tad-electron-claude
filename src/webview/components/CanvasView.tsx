@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import DesignFrame from './DesignFrame';
-import { calculateGridPosition, calculateFitToView, getGridMetrics, generateResponsiveConfig, buildHierarchyTree, calculateHierarchyPositions, getHierarchicalPosition, detectDesignRelationships } from '../utils/gridLayout';
+import { calculateGridPosition, calculateFitToView, getGridMetrics, generateResponsiveConfig, detectDesignRelationships } from '../utils/gridLayout';
 import { buildBaseNodes, computeRelationshipLayout, ViewMode } from '../utils/relationshipLayout';
 import TeleportFrame from './TeleportFrame';
 import { 
@@ -16,7 +16,6 @@ import {
     DragState,
     GridPosition,
     LayoutMode,
-    HierarchyTree,
     ConnectionLine
     } from '../types/canvas.types';
 import ConnectionLines from './ConnectionLines';
@@ -30,7 +29,6 @@ import {
     MobileIcon,
     TabletIcon,
     DesktopIcon,
-    TreeIcon,
     LinkIcon
 } from './Icons';
 
@@ -98,11 +96,11 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
             return 'pages';
         }
     });
-    const [hierarchyTree, setHierarchyTree] = useState<HierarchyTree | null>(null);
+    
     const [spaces, setSpaces] = useState<Array<{ name: string; distDir: string }>>([]);
     const [selectedSpace, setSelectedSpace] = useState<string | null>(null);
     const [defaultSpace, setDefaultSpace] = useState<string | undefined>(undefined);
-    const [showConnections, setShowConnections] = useState(true);
+    
     const [showDebug, setShowDebug] = useState<boolean>(false);
     const [focusDebug, setFocusDebug] = useState<null | {
         fileName: string;
@@ -366,15 +364,58 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [designFiles, distMode, layoutMode, currentConfig.framesPerRow]);
 
-    // Memoized connections (must be declared at top level; hooks cannot be inside conditionals)
-    const hierarchyConnections: ConnectionLine[] = useMemo(() => {
-        if (!hierarchyTree) return [];
-        try {
-            return updateConnectionPositions(hierarchyTree.connections, designFiles);
-        } catch {
-            return [];
+    // Groups view: compute grouped order by tag, with full spacer row between groups and headers
+    type GroupsRenderItem =
+        | { _kind: 'file'; _file: DesignFile; _tag: string }
+        | { _kind: 'spacer'; _id: string }
+        | { _kind: 'header'; _id: string; _label: string; _tag: string };
+    const groupsGroupedPlan = useMemo(() => {
+        if (distMode !== 'groups' || layoutMode !== 'grid') return null;
+        // Build groups from tags (union of pages/components)
+        const groups: { [tag: string]: DesignFile[] } = {};
+        for (const f of designFiles) {
+            const tagList = Array.isArray(f.tags) ? f.tags : [];
+            for (const t of tagList) {
+                if (!groups[t]) groups[t] = [];
+                groups[t].push(f);
+            }
         }
-    }, [hierarchyTree, designFiles, customPositions, frameViewports, useGlobalViewport, currentConfig, layoutMode]);
+        const items: GroupsRenderItem[] = [];
+        const indexMap: Record<string, number> = {};
+        const sortedTags = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+        const SPACER_ROWS = 1; // full empty grid row between groups
+        const pushSpacerBlock = (blockId: string, rows: number) => {
+            const count = (currentConfig.framesPerRow || 10) * rows;
+            for (let i = 0; i < count; i++) items.push({ _kind: 'spacer', _id: `${blockId}-${i}` });
+        };
+        const pushRowBreak = (blockId: string) => {
+            const fpr = (currentConfig.framesPerRow || 10);
+            const remainder = items.length % fpr;
+            if (remainder === 0) return; // already at row start
+            const need = fpr - remainder;
+            for (let i = 0; i < need; i++) items.push({ _kind: 'spacer', _id: `${blockId}-rb-${i}` });
+        };
+        let isFirst = true;
+        for (const tag of sortedTags) {
+            const arr = groups[tag].slice().sort((a, b) => a.name.localeCompare(b.name));
+            if (!isFirst) pushSpacerBlock(`gap-${tag}`, SPACER_ROWS);
+            isFirst = false;
+            // Ensure header starts at left-most column
+            pushRowBreak(`before-head-${tag}`);
+            items.push({ _kind: 'header', _id: `head-${tag}`, _label: `Group: ${tag}`, _tag: tag });
+            // Ensure group's frames start at the left-most column on the next row
+            pushRowBreak(`after-head-${tag}`);
+            for (const f of arr) {
+                const compositeKey = `${f.name}__${tag}`;
+                indexMap[compositeKey] = items.length;
+                items.push({ _kind: 'file', _file: f, _tag: tag });
+            }
+        }
+        return { items, indexMap };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [designFiles, distMode, layoutMode, currentConfig.framesPerRow]);
+
+    // Hierarchy view removed
 
     const nextConnections: ConnectionLine[] = useMemo(() => {
         try {
@@ -436,47 +477,11 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
             });
             setFrameViewports(newFrameViewports);
             
-            // Update hierarchy positioning when viewport changes to adjust connection spacing
-            if (hierarchyTree && designFiles.length > 0) {
-                // Recalculate frame dimensions for new viewport
-                let totalWidth = 0;
-                let totalHeight = 0;
-                let frameCount = 0;
-                
-                designFiles.forEach(file => {
-                    const viewportDimensions = currentConfig.viewports[viewport];
-                    totalWidth += viewportDimensions.width;
-                    totalHeight += viewportDimensions.height + 50; // Add header space
-                    frameCount++;
-                });
-                
-                const avgFrameDimensions = frameCount > 0 ? {
-                    width: Math.round(totalWidth / frameCount),
-                    height: Math.round(totalHeight / frameCount)
-                } : { width: 400, height: 550 };
-                
-                const updatedTree = calculateHierarchyPositions(hierarchyTree, currentConfig, avgFrameDimensions);
-                setHierarchyTree(updatedTree);
-            }
+            // hierarchy view removed
         }
     };
 
-    // Compute average frame dimensions for current viewport usage (used by hierarchy layout)
-    const computeAverageFrameDimensions = (): { width: number; height: number } => {
-        let totalWidth = 0;
-        let totalHeight = 0;
-        let frameCount = 0;
-        for (const file of designFiles) {
-            const vp = getFrameViewport(file.name);
-            const d = currentConfig.viewports[vp];
-            totalWidth += d.width;
-            totalHeight += d.height + 50;
-            frameCount++;
-        }
-        return frameCount > 0
-            ? { width: Math.round(totalWidth / frameCount), height: Math.round(totalHeight / frameCount) }
-            : { width: 400, height: 550 };
-    };
+    // hierarchy view removed
 
     // Focus the view on a specific frame by name
     const focusOnFrame = (fileName: string) => {
@@ -492,19 +497,13 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         const index = designFiles.findIndex(f => f.name === fileName);
         if (index === -1) return;
 
-        // Use avg dims in hierarchy mode to match how positions were computed
+        // Use current viewport dims
         let frameWidth: number;
         let frameHeight: number;
         let viewportModeForFrame: ViewportMode = getFrameViewport(fileName);
-        if (layoutMode === 'hierarchy' && hierarchyTree) {
-            const avg = computeAverageFrameDimensions();
-            frameWidth = avg.width;
-            frameHeight = avg.height;
-        } else {
-            const dims = currentConfig.viewports[viewportModeForFrame];
-            frameWidth = dims.width;
-            frameHeight = dims.height + 50; // header space
-        }
+        const dims = currentConfig.viewports[viewportModeForFrame];
+        frameWidth = dims.width;
+        frameHeight = dims.height + 50; // header space
 
         const position = getFramePosition(fileName, index);
 
@@ -673,28 +672,9 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                         ...file,
                         modified: new Date(file.modified)
                     }));
-                    // Detect design relationships and build hierarchy
+                    // Detect design relationships
                     const filesWithRelationships = detectDesignRelationships(filesWithDates);
                     setDesignFiles(filesWithRelationships);
-                    // Build hierarchy tree
-                    const tree = buildHierarchyTree(filesWithRelationships);
-                    // Calculate average frame dimensions based on viewport usage
-                    let totalWidth = 0;
-                    let totalHeight = 0;
-                    let frameCount = 0;
-                    filesWithRelationships.forEach(file => {
-                        const frameViewport = getFrameViewport(file.name);
-                        const viewportDimensions = currentConfig.viewports[frameViewport];
-                        totalWidth += viewportDimensions.width;
-                        totalHeight += viewportDimensions.height + 50; // Add header space
-                        frameCount++;
-                    });
-                    const avgFrameDimensions = frameCount > 0 ? {
-                        width: Math.round(totalWidth / frameCount),
-                        height: Math.round(totalHeight / frameCount)
-                    } : { width: 400, height: 550 };
-                    const positionedTree = calculateHierarchyPositions(tree, currentConfig, avgFrameDimensions);
-                    setHierarchyTree(positionedTree);
                     setIsLoading(false);
                     // Restore previous transform if available; otherwise center
                     setTimeout(() => {
@@ -1132,22 +1112,21 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
             if (pos) return pos;
         }
 
-        // Use hierarchy layout if in hierarchy mode and tree is available
-        if (layoutMode === 'hierarchy' && hierarchyTree) {
-            return getHierarchicalPosition(fileName, hierarchyTree);
-        }
+        // hierarchy layout removed
         
-        // Default grid position calculation (with pages-view grouping support)
+        // Default grid position calculation (with pages/components/groups grouping support)
         const viewportMode = getFrameViewport(fileName);
         const viewportDimensions = currentConfig.viewports[viewportMode];
         const actualWidth = viewportDimensions.width;
         const actualHeight = viewportDimensions.height + 50;
-        // When in pages view with grouping, prefer the computed render index
+        // When in pages/components/groups view with grouping, prefer the computed render index
         let effectiveIndex = index;
         if (distMode === 'pages' && layoutMode === 'grid' && pagesGroupedPlan && typeof pagesGroupedPlan.indexMap[fileName] === 'number') {
             effectiveIndex = pagesGroupedPlan.indexMap[fileName];
         } else if (distMode === 'components' && layoutMode === 'grid' && componentsGroupedPlan && typeof componentsGroupedPlan.indexMap[fileName] === 'number') {
             effectiveIndex = componentsGroupedPlan.indexMap[fileName];
+        } else if (distMode === 'groups' && layoutMode === 'grid' && groupsGroupedPlan && typeof groupsGroupedPlan.indexMap[fileName] === 'number') {
+            effectiveIndex = groupsGroupedPlan.indexMap[fileName];
         }
         const col = effectiveIndex % currentConfig.framesPerRow;
         const row = Math.floor(effectiveIndex / currentConfig.framesPerRow);
@@ -1501,8 +1480,8 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                 </div>
                 <div className="canvas-empty">
                     <div className="empty-state">
-                        <h3>No files found in <code>.superdesign/dist/space</code></h3>
-                        <p>Add built pages/components to <code>.superdesign/dist/space</code> and reload.</p>
+                        <h3>No files found in <code>.tad/dist/space</code></h3>
+                        <p>Add built pages/components to <code>.tad/dist/space</code> and reload.</p>
                     </div>
                 </div>
             </div>
@@ -1630,14 +1609,6 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                 <ScaleIcon />
                             </button>
                             <button 
-                                className={`toggle-btn ${layoutMode === 'hierarchy' ? 'active' : ''}`}
-                                onClick={() => setLayoutMode('hierarchy')}
-                                title="Hierarchy Layout"
-                                disabled={!hierarchyTree || hierarchyTree.nodes.size === 0}
-                            >
-                                <TreeIcon />
-                    </button>
-                            <button 
                                 className={`toggle-btn ${layoutMode === 'relationships' ? 'active' : ''}`}
                                 onClick={() => setLayoutMode('relationships')}
                                 title="Relationships Layout (next → horizontal, children ↓ vertical)"
@@ -1645,15 +1616,6 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                 <LinkIcon />
                             </button>
                         </div>
-                        {layoutMode === 'hierarchy' && (
-                            <button 
-                                className={`toolbar-btn connection-btn ${showConnections ? 'active' : ''}`}
-                                onClick={() => setShowConnections(!showConnections)}
-                                title="Toggle Connection Lines"
-                            >
-                                <LinkIcon />
-                    </button>
-                        )}
                         <button 
                             className={`toolbar-btn ${showDebug ? 'active' : ''}`}
                             onClick={() => setShowDebug(prev => !prev)}
@@ -1671,14 +1633,14 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                             <button
                                 className={`toggle-btn ${distMode === 'pages' ? 'active' : ''}`}
                                 onClick={() => setDistMode('pages')}
-                                title="Show built Pages (.superdesign/dist/pages)"
+                                title="Show built Pages (.tad/dist/pages)"
                             >
                                 Pages
                             </button>
                             <button
                                 className={`toggle-btn ${distMode === 'components' ? 'active' : ''}`}
                                 onClick={() => setDistMode('components')}
-                                title="Show built Components (.superdesign/dist/components)"
+                                title="Show built Components (.tad/dist/components)"
                             >
                                 Components
                             </button>
@@ -1895,15 +1857,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                             }
                         }}
                     >
-                        {/* Connection Lines (render behind frames) */}
-                        {layoutMode === 'hierarchy' && hierarchyTree && showConnections && (
-                            <ConnectionLines
-                                connections={hierarchyConnections}
-                                containerBounds={hierarchyTree.bounds}
-                                isVisible={showConnections}
-                                zoomLevel={currentZoom}
-                            />
-                        )}
+                        {/* Connection Lines (relationships mode only) */}
                         {/* Next-relationship arrows (rendered when viewing pages) */}
                         {distMode === 'pages' && (
                             <ConnectionLines
@@ -2013,7 +1967,11 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                             }
                             return designFiles as any[];
                         })() : (() => {
-                            // Build groups from tags (union of pages/components)
+                            // Use grouped plan for groups when available (grid layout)
+                            if (layoutMode === 'grid' && groupsGroupedPlan && Array.isArray(groupsGroupedPlan.items)) {
+                                return groupsGroupedPlan.items as any[];
+                            }
+                            // Fallback: simple flatten without enforced row breaks
                             const groups: { [tag: string]: DesignFile[] } = {};
                             for (const f of designFiles) {
                                 const tagList = Array.isArray(f.tags) ? f.tags : [];
@@ -2022,43 +1980,46 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                     groups[t].push(f);
                                 }
                             }
-                            // Flatten to an array with labeled group header items
-                            const flattened: Array<{ _kind: 'group' | 'file'; _tag?: string; _file?: DesignFile }> = [];
+                            const flattened: Array<{ _kind: 'header' | 'file'; _tag?: string; _file?: DesignFile; _id?: string; _label?: string }> = [];
                             const sortedTags = Object.keys(groups).sort((a, b) => a.localeCompare(b));
                             for (const tag of sortedTags) {
-                                flattened.push({ _kind: 'group', _tag: tag });
+                                flattened.push({ _kind: 'header', _tag: tag, _id: `head-${tag}`, _label: `Group: ${tag}` });
                                 for (const f of groups[tag]) flattened.push({ _kind: 'file', _file: f, _tag: tag });
                             }
-                            // Map to pseudo design files with injected positions later
-                            // We'll render headers as special frames
                             return flattened;
                         })()).map((item, index, arr) => {
                             if (distMode === 'groups') {
                                 const g = item as any;
-                                if (g._kind === 'group') {
-                                    // Render group label as a sticky header frame placeholder
-                                    // Place group label slightly above the first file in the tag group
-                                    const dims = { width: 380, height: 56 };
-                                    let firstInGroup: DesignFile | null = null;
-                                    for (let k = index + 1; k < arr.length; k++) {
-                                        const next: any = arr[k];
-                                        if (next && next._kind === 'file' && next._tag === g._tag && next._file) {
-                                            firstInGroup = next._file as DesignFile;
+                                // Spacers occupy grid slots to enforce row breaks
+                                if (g && g._kind === 'spacer') {
+                                    const position = getFramePosition(`__spacer__${g._id}`, index);
+                                    return (
+                                        <div key={`spacer-${g._id}-${index}`} style={{ position: 'absolute', left: position.x, top: position.y, width: 1, height: 1 }} />
+                                    );
+                                }
+                                // Header: place label above the first element of the group, aligned left
+                                if (g && g._kind === 'header') {
+                                    let nextFile: DesignFile | null = null;
+                                    for (let j = index + 1; j < arr.length; j++) {
+                                        const candidate: any = arr[j];
+                                        if (candidate && candidate._kind === 'file' && candidate._file && candidate._tag === g._tag) {
+                                            nextFile = candidate._file as DesignFile;
                                             break;
                                         }
                                     }
-                                    const basePos = getFramePosition(`__group__${g._tag}`, index);
+                                    if (!nextFile) return null;
+                                    const dims = { width: 380, height: 56 };
                                     const PADDING_Y = 8;
-                                    const labelPos = firstInGroup
-                                        ? { x: getFramePosition(firstInGroup.name, index).x, y: getFramePosition(firstInGroup.name, index).y - (dims.height + PADDING_Y) }
-                                        : basePos;
+                                    const firstPos = getFramePosition(`${nextFile.name}__${g._tag}`, index);
+                                    const labelLeft = firstPos.x;
+                                    const labelTop = firstPos.y - (dims.height + PADDING_Y);
                                     return (
                                         <div
-                                            key={`group-${g._tag}-${index}`}
+                                            key={`groups-header-${g._id}-${index}`}
                                             className="group-label"
-                                            style={{ position: 'absolute', left: labelPos.x, top: labelPos.y, width: dims.width, height: dims.height }}
+                                            style={{ position: 'absolute', left: labelLeft, top: labelTop, width: dims.width, height: dims.height }}
                                         >
-                                            <div className="group-label-badge">Group: {g._tag}</div>
+                                            <div className="group-label-badge">{g._label}</div>
                                         </div>
                                     );
                                 }

@@ -1,5 +1,5 @@
 /* Main App Container */
-.superdesign-app {
+.tad-app {
     width: 100%;
     height: 100vh;
     display: flex;
@@ -14,19 +14,19 @@
 }
 
 /* App container variants for different contexts */
-.superdesign-app.chat-view {
+.tad-app.chat-view {
     background: var(--vscode-sideBar-background);
     color: var(--vscode-sideBar-foreground);
     border-right: 1px solid var(--vscode-sideBar-border);
 }
 
-.superdesign-app.chat-view.panel-layout {
+.tad-app.chat-view.panel-layout {
     background: var(--vscode-panel-background);
     color: var(--vscode-panel-foreground);
     border-right: 1px solid var(--vscode-panel-border);
 }
 
-.superdesign-app.canvas-view {
+.tad-app.canvas-view {
     background: var(--vscode-panel-background);
     color: var(--vscode-panel-foreground);
     border-right: 1px solid var(--vscode-panel-border);

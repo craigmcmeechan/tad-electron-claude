@@ -1,14 +1,13 @@
 {
-  "name": "superdesign",
-  "displayName": "superdesign",
-  "description": "The 1st Design Agent lives inside your IDE",
+  "name": "tad",
+  "displayName": "Tad",
+  "description": "Template-assisted design for developers",
   "version": "0.0.11",
   "publisher": "kiraboshi",
-  "author": "kiraboshi",
-  "icon": "icon.png",
+  "author": "kira boshi",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kiraboshi/superdesign"
+    "url": "https://github.com/kiraboshi/tad"
   },
   "engines": {
     "vscode": "^1.90.0"
@@ -36,10 +35,10 @@
     "automation"
   ],
   "activationEvents": [
-    "onCommand:superdesign.helloWorld",
-    "onCommand:superdesign.buildTemplates",
-    "onCommand:superdesign.createTemplateSpace",
-    "onView:superdesign.chatView",
+    "onCommand:tad.helloWorld",
+    "onCommand:tad.buildTemplates",
+    "onCommand:tad.createTemplateSpace",
+    "onView:tad.chatView",
     "onLanguage:nunjucks"
   ],
   "main": "./dist/extension.js",
@@ -67,114 +66,114 @@
     ],
     "commands": [
       {
-        "command": "superdesign.helloWorld",
+        "command": "tad.helloWorld",
         "title": "Hello World",
-        "category": "Superdesign"
+        "category": "tad"
       },
       {
-        "command": "superdesign.buildTemplates",
-        "title": "Build Templates (Superdesign)",
-        "category": "Superdesign",
+        "command": "tad.buildTemplates",
+        "title": "Build Templates (tad)",
+        "category": "tad",
         "icon": "$(run)"
       },
       {
-        "command": "superdesign.syncBuilder",
-        "title": "Sync Builder (Superdesign)",
-        "category": "Superdesign",
+        "command": "tad.syncBuilder",
+        "title": "Sync Builder (tad)",
+        "category": "tad",
         "icon": "$(cloud-download)"
       },
       {
-        "command": "superdesign.configureOpenAIApiKey",
+        "command": "tad.configureOpenAIApiKey",
         "title": "Configure OpenAI API Key",
-        "category": "Superdesign"
+        "category": "tad"
       },
       {
-        "command": "superdesign.configureOpenRouterApiKey",
+        "command": "tad.configureOpenRouterApiKey",
         "title": "Configure OpenRouter API Key",
-        "category": "Superdesign"
+        "category": "tad"
       },
       {
-        "command": "superdesign.showChatSidebar",
+        "command": "tad.showChatSidebar",
         "title": "Show Chat Sidebar",
-        "category": "Superdesign"
+        "category": "tad"
       },
       {
-        "command": "superdesign.openCanvas",
+        "command": "tad.openCanvas",
         "title": "Open Canvas View",
-        "category": "Superdesign",
+        "category": "tad",
         "icon": "$(window)"
       },
       {
-        "command": "superdesign.clearChat",
+        "command": "tad.clearChat",
         "title": "Clear Chat",
-        "category": "Superdesign",
+        "category": "tad",
         "icon": "$(clear-all)"
       },
       {
-        "command": "superdesign.resetWelcome",
+        "command": "tad.resetWelcome",
         "title": "Reset Welcome Screen",
-        "category": "Superdesign"
+        "category": "tad"
       },
       {
-        "command": "superdesign.initializeProject",
-        "title": "Initialize Superdesign",
-        "category": "Superdesign"
+        "command": "tad.initializeProject",
+        "title": "Initialize tad",
+        "category": "tad"
       },
       {
-        "command": "superdesign.openSettings",
+        "command": "tad.openSettings",
         "title": "Open Settings",
-        "category": "Superdesign",
+        "category": "tad",
         "icon": "$(settings-gear)"
       },
       {
-        "command": "superdesign.createTemplateSpace",
+        "command": "tad.createTemplateSpace",
         "title": "Create Template Space",
-        "category": "Superdesign",
+        "category": "tad",
         "icon": "$(new-folder)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "superdesign.openCanvas",
-          "when": "view == superdesign.chatView",
+          "command": "tad.openCanvas",
+          "when": "view == tad.chatView",
           "group": "navigation"
         },
         {
-          "command": "superdesign.buildTemplates",
-          "when": "view == superdesign.chatView",
+          "command": "tad.buildTemplates",
+          "when": "view == tad.chatView",
           "group": "navigation@1"
         },
         {
-          "command": "superdesign.syncBuilder",
-          "when": "view == superdesign.chatView",
+          "command": "tad.syncBuilder",
+          "when": "view == tad.chatView",
           "group": "navigation@2"
         },
         {
-          "command": "superdesign.openSettings",
-          "when": "view == superdesign.chatView",
+          "command": "tad.openSettings",
+          "when": "view == tad.chatView",
           "group": "navigation"
         },
         {
-          "command": "superdesign.clearChat",
-          "when": "view == superdesign.chatView",
+          "command": "tad.clearChat",
+          "when": "view == tad.chatView",
           "group": "navigation"
         }
       ],
       "explorer/context": [
         {
-          "command": "superdesign.createTemplateSpace",
+          "command": "tad.createTemplateSpace",
           "when": "explorerResourceIsFolder",
           "group": "navigation@50"
         }
       ]
     },
     "views": {
-      "superdesign-sidebar": [
+      "tad-sidebar": [
         {
           "type": "webview",
-          "id": "superdesign.chatView",
-          "name": "SUPER DESIGN",
+          "id": "tad.chatView",
+          "name": "tad",
           "when": "true"
         }
       ]
@@ -182,26 +181,26 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "superdesign-sidebar",
-          "title": "Superdesign",
+          "id": "tad-sidebar",
+          "title": "Tad",
           "icon": "icon.svg"
         }
       ]
     },
     "configuration": {
-      "title": "Superdesign",
+      "title": "Tad",
       "properties": {
-        "superdesign.openaiApiKey": {
+        "tad.openaiApiKey": {
           "type": "string",
           "description": "OpenAI API key for custom agent",
           "scope": "application"
         },
-        "superdesign.openrouterApiKey": {
+        "tad.openrouterApiKey": {
           "type": "string",
           "description": "OpenRouter API key for custom agent",
           "scope": "application"
         },
-        "superdesign.aiModelProvider": {
+        "tad.aiModelProvider": {
           "type": "string",
           "enum": [
             "openai",
@@ -211,24 +210,24 @@
           "description": "AI model provider for custom agent (OpenAI or OpenRouter)",
           "scope": "application"
         },
-        "superdesign.aiModel": {
+        "tad.aiModel": {
           "type": "string",
           "description": "Specific AI model to use (e.g., gpt-4o, openrouter/auto)",
           "scope": "application"
         },
-        "superdesign.nunjucks.templateRoots": {
+        "tad.nunjucks.templateRoots": {
           "type": "array",
           "items": {
             "type": "string"
           },
           "default": [
-            ".superdesign/templates",
+            ".tad/templates",
             "."
           ],
           "description": "Directories (workspace-relative) to search for Nunjucks templates (used for navigation, completion, diagnostics).",
           "scope": "resource"
         },
-        "superdesign.nunjucks.defaultExtensions": {
+        "tad.nunjucks.defaultExtensions": {
           "type": "array",
           "items": {
             "type": "string"
@@ -241,14 +240,14 @@
           "description": "File extensions to try when resolving templates without extension.",
           "scope": "resource"
         },
-        "superdesign.nunjucks.ignore": {
+        "tad.nunjucks.ignore": {
           "type": "array",
           "items": {
             "type": "string"
           },
           "default": [
             "**/node_modules/**",
-            ".superdesign/dist/**"
+            ".tad/dist/**"
           ],
           "description": "Glob patterns to ignore when indexing templates.",
           "scope": "resource"

@@ -26,15 +26,15 @@ async function saveImageToMoodboard(data: {
 	}
 
 	try {
-		// Create .superdesign/moodboard directory if it doesn't exist
-		const moodboardDir = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'moodboard');
+		// Create .tad/moodboard directory if it doesn't exist
+		const moodboardDir = vscode.Uri.joinPath(workspaceFolder.uri, '.tad', 'moodboard');
 		
 		try {
 			await vscode.workspace.fs.stat(moodboardDir);
 		} catch {
 			// Directory doesn't exist, create it
 			await vscode.workspace.fs.createDirectory(moodboardDir);
-			Logger.info('Created .superdesign/moodboard directory');
+			Logger.info('Created .tad/moodboard directory');
 		}
 
 		// Convert base64 to buffer and save file
@@ -142,9 +142,9 @@ async function getCssFileContent(filePath: string, sidebarProvider: ChatSidebarP
 				throw new Error('No workspace folder found');
 			}
 			
-			// If path doesn't start with .superdesign, add it
-			if (!filePath.startsWith('.superdesign/') && filePath.startsWith('design_iterations/')) {
-				resolvedPath = `.superdesign/${filePath}`;
+		// If path doesn't start with .tad, add it
+		if (!filePath.startsWith('.tad/') && filePath.startsWith('design_iterations/')) {
+			resolvedPath = `.tad/${filePath}`;
 			}
 			
 			resolvedPath = path.join(workspaceFolder.uri.fsPath, resolvedPath);
@@ -179,7 +179,7 @@ async function getCssFileContent(filePath: string, sidebarProvider: ChatSidebarP
 	}
 }
 
-// List prompt template markdown files in .superdesign directory
+// List prompt template markdown files in .tad directory
 async function listPromptTemplates(sidebarProvider: ChatSidebarProvider) {
     try {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -191,11 +191,11 @@ async function listPromptTemplates(sidebarProvider: ChatSidebarProvider) {
             return;
         }
 
-        // Support files like .superdesign/prompts.*.md and any nested matches
-        const patterns = [
-            new vscode.RelativePattern(workspaceFolder, '.superdesign/prompts*.md'),
-            new vscode.RelativePattern(workspaceFolder, '.superdesign/**/prompts*.md')
-        ];
+		// Support files like .tad/prompts.*.md and any nested matches
+		const patterns = [
+			new vscode.RelativePattern(workspaceFolder, '.tad/prompts*.md'),
+			new vscode.RelativePattern(workspaceFolder, '.tad/**/prompts*.md')
+		];
 
         const foundFilesSets = await Promise.all(patterns.map(p => vscode.workspace.findFiles(p)));
         const seen = new Set<string>();
@@ -306,8 +306,8 @@ async function submitEmailToSupabase(email: string, sidebarProvider: ChatSidebar
 	}
 }
 
-// Function to initialize Superdesign project structure
-async function initializeSuperdesignProject() {
+// Function to initialize tad project structure
+async function initializetadProject() {
 	const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 	if (!workspaceFolder) {
 		vscode.window.showErrorMessage('No workspace folder found. Please open a workspace first.');
@@ -315,7 +315,7 @@ async function initializeSuperdesignProject() {
 	}
 
 	const workspaceRoot = workspaceFolder.uri;
-	const superdesignFolder = vscode.Uri.joinPath(workspaceRoot, '.superdesign');
+	const tadFolder = vscode.Uri.joinPath(workspaceRoot, '.tad');
 
 	// Detect OS for correct keyboard shortcut
 	const isWindows = process.platform === 'win32';
@@ -324,21 +324,21 @@ async function initializeSuperdesignProject() {
 	const designRuleContent = `When asked to design UI & frontend interface
 When asked to design UI & frontend interface
 # Role
-You are superdesign, a senior frontend designer integrated into VS Code as part of the Super Design extension.
+You are tad, a senior frontend designer integrated into VS Code as part of the tad extension.
 Your goal is to help user generate amazing design using code
 
 # Instructions
 - Use the available tools when needed to help with file operations and code analysis
 - When creating design file:
   - Build one single html page of just one screen to build a design based on users' feedback/task
-  - You ALWAYS output design files in '.superdesign/design_iterations' folder as {design_name}_{n}.html (Where n needs to be unique like table_1.html, table_2.html, etc.) or svg file
+	  - You ALWAYS output design files in '.tad/design_iterations' folder as {design_name}_{n}.html (Where n needs to be unique like table_1.html, table_2.html, etc.) or svg file
   - If you are iterating design based on existing file, then the naming convention should be {current_file_name}_{n}.html, e.g. if we are iterating ui_1.html, then each version should be ui_1_1.html, ui_1_2.html, etc.
 - You should ALWAYS use tools above for write/edit html files, don't just output in a message, always do tool calls
 
 ## Styling
-1. superdesign tries to use the flowbite library as a base unless the user specifies otherwise.
-2. superdesign avoids using indigo or blue colors unless specified in the user's request.
-3. superdesign MUST generate responsive designs.
+1. tad tries to use the flowbite library as a base unless the user specifies otherwise.
+2. tad avoids using indigo or blue colors unless specified in the user's request.
+3. tad MUST generate responsive designs.
 4. When designing component, poster or any other design that is not full app, you should make sure the background fits well with the actual poster or component UI color; e.g. if component is light then background should be dark, vice versa.
 5. Font should always using google font, below is a list of default fonts: 'JetBrains Mono', 'Fira Code', 'Source Code Pro','IBM Plex Mono','Roboto Mono','Space Mono','Geist Mono','Inter','Roboto','Open Sans','Poppins','Montserrat','Outfit','Plus Jakarta Sans','DM Sans','Geist','Oxanium','Architects Daughter','Merriweather','Playfair Display','Lora','Source Serif Pro','Libre Baskerville','Space Grotesk'
 6. When creating CSS, make sure you include !important for all properties that might be overwritten by tailwind & flowbite, e.g. h1, body, etc.
@@ -577,7 +577,7 @@ They looks good
 <assistant>
 Great, next let's design the color & font theme,
 
-generateTheme(theme_name='Vercel techy style', reasoning_reference='Reference classic shadcn style that has ...', cssFilePath='.superdesign/design_iterations/theme_1.css', cssSheet=':root {
+generateTheme(theme_name='Vercel techy style', reasoning_reference='Reference classic shadcn style that has ...', cssFilePath='.tad/design_iterations/theme_1.css', cssSheet=':root {
   --background: oklch(1.0000 0 0);
   --foreground: oklch(0.1448 0 0);
   --card: oklch(1.0000 0 0);
@@ -679,8 +679,8 @@ This looks great, lets do it
 <assistant>
 Great, I will generate the html file for each UI component and then combine them together to form a single html file
 
-write(file_path='.superdesign/design_iterations/chat_ui.css', content='...')
-write(file_path='.superdesign/design_iterations/chat_ui.html', content='...')
+write(file_path='.tad/design_iterations/chat_ui.css', content='...')
+write(file_path='.tad/design_iterations/chat_ui.html', content='...')
 
 I've created the html design, please reveiw and let me know if you need any changes
 
@@ -689,7 +689,7 @@ I've created the html design, please reveiw and let me know if you need any chan
 IMPORTANT RULES:
 1. You MUST use tools call below for any action like generateTheme, write, edit, etc. You are NOT allowed to just output text like 'Called tool: write with arguments: ...' or <tool-call>...</tool-call>; MUST USE TOOL CALL (This is very important!!)
 2. You MUST confirm the layout, and then theme style, and then animation
-3. You MUST use .superdesign/design_iterations folder to save the design files, do NOT save to other folders
+	3. You MUST use .tad/design_iterations folder to save the design files, do NOT save to other folders
 4. You MUST create follow the workflow above
 
 # Available Tools
@@ -1235,8 +1235,8 @@ html.dark {
 }`;
 
 	try {
-		// Create .superdesign/design_iterations directory
-		const designIterationsFolder = vscode.Uri.joinPath(superdesignFolder, 'design_iterations');
+		// Create .tad/design_iterations directory
+		const designIterationsFolder = vscode.Uri.joinPath(tadFolder, 'design_iterations');
 		await vscode.workspace.fs.createDirectory(designIterationsFolder);
 
 		// Create default_ui_darkmode.css file
@@ -1264,7 +1264,7 @@ html.dark {
 		try {
 			const existingContent = await vscode.workspace.fs.readFile(designMdcPath);
 			const currentContent = Buffer.from(existingContent).toString('utf8');
-			if (!currentContent.includes('superdesign: Open Canvas View')) {
+			if (!currentContent.includes('tad: Open Canvas View')) {
 				const updatedContent = currentContent + '\n\n' + designRuleMdcContent;
 				await vscode.workspace.fs.writeFile(designMdcPath, Buffer.from(updatedContent, 'utf8'));
 			}
@@ -1279,7 +1279,7 @@ html.dark {
 		try {
 			const existingContent = await vscode.workspace.fs.readFile(windsurfRulesPath);
 			const currentContent = Buffer.from(existingContent).toString('utf8');
-			if (!currentContent.includes('superdesign: Open Canvas View')) {
+			if (!currentContent.includes('tad: Open Canvas View')) {
 				const updatedContent = currentContent + '\n\n' + designRuleContent;
 				await vscode.workspace.fs.writeFile(windsurfRulesPath, Buffer.from(updatedContent, 'utf8'));
 			}
@@ -1288,18 +1288,18 @@ html.dark {
 			await vscode.workspace.fs.writeFile(windsurfRulesPath, Buffer.from(designRuleContent, 'utf8'));
 		}
 
-		vscode.window.showInformationMessage('✅ Superdesign project initialized successfully! Created .superdesign folder and design rules for Cursor and Windsurf.');
+		vscode.window.showInformationMessage('✅ Tad project initialized successfully! Created .tad folder and design rules for Cursor and Windsurf.');
 		
 	} catch (error) {
-		vscode.window.showErrorMessage(`Failed to initialize Superdesign project: ${error}`);
+		vscode.window.showErrorMessage(`Failed to initialize tad project: ${error}`);
 	}
 }
 
 export function activate(context: vscode.ExtensionContext) {
 	// Initialize the centralized logger
 	Logger.initialize();
-	Logger.info('Superdesign extension is now active!');
-	// Note: Users can manually open output via View → Output → Select "Superdesign" if needed
+Logger.info('Tad extension is now active!');
+	// Note: Users can manually open output via View → Output → Select "tad" if needed
 
 	// Initialize Custom Agent service
 	Logger.info('Creating CustomAgentService...');
@@ -1317,22 +1317,22 @@ export function activate(context: vscode.ExtensionContext) {
 	// The command has been defined in the package.json file
 	// Now provide the implementation of the command with registerCommand
 	// The commandId parameter must match the command field in package.json
-	const helloWorldDisposable = vscode.commands.registerCommand('superdesign.helloWorld', () => {
+	const helloWorldDisposable = vscode.commands.registerCommand('tad.helloWorld', () => {
 		// The code you place here will be executed every time your command is executed
 		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from superdesign!');
+		vscode.window.showInformationMessage('Hello World from tad!');
 	});
 
 	// Register API key configuration commands
-	const configureApiKeyDisposable = vscode.commands.registerCommand('superdesign.configureApiKey', async () => {
+	const configureApiKeyDisposable = vscode.commands.registerCommand('tad.configureApiKey', async () => {
 		await configureAnthropicApiKey();
 	});
 
-	const configureOpenAIApiKeyDisposable = vscode.commands.registerCommand('superdesign.configureOpenAIApiKey', async () => {
+	const configureOpenAIApiKeyDisposable = vscode.commands.registerCommand('tad.configureOpenAIApiKey', async () => {
 		await configureOpenAIApiKey();
 	});
 
-	const configureOpenRouterApiKeyDisposable = vscode.commands.registerCommand('superdesign.configureOpenRouterApiKey', async () => {
+	const configureOpenRouterApiKeyDisposable = vscode.commands.registerCommand('tad.configureOpenRouterApiKey', async () => {
 		await configureOpenRouterApiKey();
 	});
 
@@ -1352,24 +1352,24 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	// Register command to show sidebar
-	const showSidebarDisposable = vscode.commands.registerCommand('superdesign.showChatSidebar', () => {
-		vscode.commands.executeCommand('workbench.view.extension.superdesign-sidebar');
+	const showSidebarDisposable = vscode.commands.registerCommand('tad.showChatSidebar', () => {
+		vscode.commands.executeCommand('workbench.view.extension.tad-sidebar');
 	});
 
 	// Register canvas command
-	const openCanvasDisposable = vscode.commands.registerCommand('superdesign.openCanvas', () => {
-		SuperdesignCanvasPanel.createOrShow(context.extensionUri, sidebarProvider);
-	});
+		const openCanvasDisposable = vscode.commands.registerCommand('tad.openCanvas', () => {
+			tadCanvasPanel.createOrShow(context.extensionUri, sidebarProvider);
+		});
 
 	// Register clear chat command
-	const clearChatDisposable = vscode.commands.registerCommand('superdesign.clearChat', () => {
+	const clearChatDisposable = vscode.commands.registerCommand('tad.clearChat', () => {
 		sidebarProvider.sendMessage({
 			command: 'clearChat'
 		});
 	});
 
 	// Register reset welcome command
-	const resetWelcomeDisposable = vscode.commands.registerCommand('superdesign.resetWelcome', () => {
+	const resetWelcomeDisposable = vscode.commands.registerCommand('tad.resetWelcome', () => {
 		sidebarProvider.sendMessage({
 			command: 'resetWelcome'
 		});
@@ -1377,17 +1377,17 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	// Register initialize project command
-	const initializeProjectDisposable = vscode.commands.registerCommand('superdesign.initializeProject', async () => {
-		await initializeSuperdesignProject();
+	const initializeProjectDisposable = vscode.commands.registerCommand('tad.initializeProject', async () => {
+		await initializetadProject();
 	});
 
 	// Register open settings command
-	const openSettingsDisposable = vscode.commands.registerCommand('superdesign.openSettings', () => {
-		vscode.commands.executeCommand('workbench.action.openSettings', '@ext:iganbold.superdesign');
+	const openSettingsDisposable = vscode.commands.registerCommand('tad.openSettings', () => {
+		vscode.commands.executeCommand('workbench.action.openSettings', '@ext:iganbold.tad');
 	});
 
     // Register: Create Template Space (optionally from Explorer context)
-    const createTemplateSpaceDisposable = vscode.commands.registerCommand('superdesign.createTemplateSpace', async (resource?: vscode.Uri) => {
+    const createTemplateSpaceDisposable = vscode.commands.registerCommand('tad.createTemplateSpace', async (resource?: vscode.Uri) => {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
             vscode.window.showErrorMessage('No workspace folder found. Please open a workspace first.');
@@ -1404,7 +1404,7 @@ export function activate(context: vscode.ExtensionContext) {
             });
             if (!spaceName) return;
 
-            // Determine template root: if invoked from Explorer on a folder, use it as the root; else default under .superdesign/templates/<spaceName>
+			// Determine template root: if invoked from Explorer on a folder, use it as the root; else default under .tad/templates/<spaceName>
             const isDirectory = async (uri: vscode.Uri) => {
                 try { const stat = await vscode.workspace.fs.stat(uri); return stat.type === vscode.FileType.Directory; } catch { return false; }
             };
@@ -1413,7 +1413,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (resource && await isDirectory(resource)) {
                 templateRootUri = resource;
             } else {
-                templateRootUri = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'templates', spaceName);
+				templateRootUri = vscode.Uri.joinPath(workspaceFolder.uri, '.tad', 'templates', spaceName);
             }
 
             // Ensure template root and standard subfolders
@@ -1426,12 +1426,12 @@ export function activate(context: vscode.ExtensionContext) {
             // Create a minimal starter page if not present
             const starterPage = vscode.Uri.joinPath(templateRootUri, 'pages', 'index.njk');
             try { await vscode.workspace.fs.stat(starterPage); } catch {
-                const starter = Buffer.from(`<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="utf-8"/>\n  <title>${spaceName} — Home</title>\n  <link rel="stylesheet" href="/design-system.css" />\n</head>\n<body>\n  <h1>${spaceName} — Home</h1>\n  <p>Welcome to your new Superdesign template space.</p>\n</body>\n</html>\n`, 'utf8');
+				const starter = Buffer.from(`<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"utf-8\"/>\n  <title>${spaceName} — Home</title>\n  <link rel=\"stylesheet\" href=\"/design-system.css\" />\n</head>\n<body>\n  <h1>${spaceName} — Home</h1>\n  <p>Welcome to your new Tad template space.</p>\n</body>\n</html>\n`, 'utf8');
                 await vscode.workspace.fs.writeFile(starterPage, starter);
             }
 
-            // Default dist directory: .superdesign/dist/<spaceName>
-            const distDirUri = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist', spaceName);
+			// Default dist directory: .tad/dist/<spaceName>
+			const distDirUri = vscode.Uri.joinPath(workspaceFolder.uri, '.tad', 'dist', spaceName);
             await vscode.workspace.fs.createDirectory(distDirUri);
 
             // Compute workspace-relative paths for spaces.json
@@ -1444,8 +1444,8 @@ export function activate(context: vscode.ExtensionContext) {
             const templateRootRel = relPath(templateRootUri);
             const distDirRel = relPath(distDirUri);
 
-            // Read/update .superdesign/spaces.json
-            const spacesJsonUri = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'spaces.json');
+			// Read/update .tad/spaces.json
+			const spacesJsonUri = vscode.Uri.joinPath(workspaceFolder.uri, '.tad', 'spaces.json');
             let spacesObj: any = undefined;
             try {
                 const buf = await vscode.workspace.fs.readFile(spacesJsonUri);
@@ -1476,7 +1476,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // Register sync builder command: write packaged builder into working directory
-    const syncBuilderDisposable = vscode.commands.registerCommand('superdesign.syncBuilder', async () => {
+    const syncBuilderDisposable = vscode.commands.registerCommand('tad.syncBuilder', async () => {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
             vscode.window.showErrorMessage('No workspace folder found. Please open a workspace first.');
@@ -1500,7 +1500,7 @@ export function activate(context: vscode.ExtensionContext) {
             return;
         }
 
-        const destDir = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'builder');
+		const destDir = vscode.Uri.joinPath(workspaceFolder.uri, '.tad', 'builder');
         try { await vscode.workspace.fs.createDirectory(destDir); } catch {}
 
         const copyFile = async (name: string) => {
@@ -1514,7 +1514,7 @@ export function activate(context: vscode.ExtensionContext) {
         try {
             await copyFile('build.js');
             await copyFile('package.json');
-            vscode.window.showInformationMessage('✅ Synced builder into .superdesign/builder');
+			vscode.window.showInformationMessage('✅ Synced builder into .tad/builder');
         } catch (e) {
             Logger.error(`Failed to sync builder: ${e}`);
             vscode.window.showErrorMessage(`Failed to sync builder: ${e}`);
@@ -1545,7 +1545,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Helper: ensure a builder exists by seeding from bundled assets if missing
     const ensureWorkspaceBuilder = async (context: vscode.ExtensionContext, workspaceRoot: vscode.Uri, logger: typeof Logger) => {
-        const builderDir = vscode.Uri.joinPath(workspaceRoot, '.superdesign', 'builder');
+		const builderDir = vscode.Uri.joinPath(workspaceRoot, '.tad', 'builder');
         const buildJs = vscode.Uri.joinPath(builderDir, 'build.js');
         if (await pathExists(buildJs)) {
             return { builderDir, buildJs, seeded: false } as const;
@@ -1569,7 +1569,7 @@ export function activate(context: vscode.ExtensionContext) {
         } catch {}
         try {
             await copyDirectory(embeddedDir, builderDir);
-            logger.info('Seeded .superdesign/builder from bundled Superdesign assets');
+			logger.info('Seeded .tad/builder from bundled Tad assets');
         } catch (e) {
             logger.error(`Failed to seed workspace builder: ${e}`);
             return null;
@@ -1579,7 +1579,7 @@ export function activate(context: vscode.ExtensionContext) {
     };
 
     // Register build templates command
-    const buildTemplatesDisposable = vscode.commands.registerCommand('superdesign.buildTemplates', async () => {
+    const buildTemplatesDisposable = vscode.commands.registerCommand('tad.buildTemplates', async () => {
 		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 		if (!workspaceFolder) {
 			vscode.window.showErrorMessage('No workspace folder found. Please open a workspace first.');
@@ -1589,17 +1589,17 @@ export function activate(context: vscode.ExtensionContext) {
         // Ensure a usable builder exists (workspace or bundled)
         const ensured = await ensureWorkspaceBuilder(context, workspaceFolder.uri, Logger);
         if (!ensured) {
-            vscode.window.showErrorMessage('No builder found. Please add your builder to .superdesign/builder or update the extension to include a bundled builder.');
+			vscode.window.showErrorMessage('No builder found. Please add your builder to .tad/builder or update the extension to include a bundled builder.');
             return;
         }
         const { builderDir, buildJs } = ensured;
 
 		const output = Logger.getOutputChannel();
 		output.show(true);
-		Logger.info('Starting Superdesign template build...');
+		Logger.info('Starting Tad template build...');
 
 		await vscode.window.withProgress({
-			title: 'Building Superdesign templates',
+			title: 'Building Tad templates',
 			location: vscode.ProgressLocation.Notification,
 			cancellable: false
 		}, async () => {
@@ -1668,20 +1668,20 @@ export function activate(context: vscode.ExtensionContext) {
 				await child;
 			}
 
-			Logger.info('✅ Superdesign templates built successfully.');
+		Logger.info('✅ Tad templates built successfully.');
 		});
 	});
 
 	// Register command to open Template View in chat panel
-	const openTemplateViewDisposable = vscode.commands.registerCommand('superdesign.openTemplateView', () => {
+	const openTemplateViewDisposable = vscode.commands.registerCommand('tad.openTemplateView', () => {
 		// Ensure the chat sidebar is visible
-		vscode.commands.executeCommand('workbench.view.extension.superdesign-sidebar');
+		vscode.commands.executeCommand('workbench.view.extension.tad-sidebar');
 		// Ask the webview to open the template panel
 		sidebarProvider.sendMessage({ command: 'openTemplateView' });
 	});
 
 	// Register configure API key command (alternative to the existing one)
-	const configureApiKeyQuickDisposable = vscode.commands.registerCommand('superdesign.configureApiKeyQuick', async () => {
+	const configureApiKeyQuickDisposable = vscode.commands.registerCommand('tad.configureApiKeyQuick', async () => {
 		await configureAnthropicApiKey();
 	});
 
@@ -1690,7 +1690,7 @@ export function activate(context: vscode.ExtensionContext) {
 		switch (message.command) {
 			case 'checkCanvasStatus':
 				// Check if canvas panel is currently open
-				const isCanvasOpen = SuperdesignCanvasPanel.currentPanel !== undefined;
+				const isCanvasOpen = tadCanvasPanel.currentPanel !== undefined;
 				sidebarProvider.sendMessage({
 					command: 'canvasStatusResponse',
 					isOpen: isCanvasOpen
@@ -1699,7 +1699,7 @@ export function activate(context: vscode.ExtensionContext) {
 				
 			case 'autoOpenCanvas':
 				// Auto-open canvas if not already open
-				SuperdesignCanvasPanel.createOrShow(context.extensionUri, sidebarProvider);
+				tadCanvasPanel.createOrShow(context.extensionUri, sidebarProvider);
 				break;
 
 			case 'setContextFromCanvas':
@@ -1735,10 +1735,10 @@ export function activate(context: vscode.ExtensionContext) {
 				submitEmailToSupabase(message.email, sidebarProvider);
 				break;
 
-			case 'initializeSuperdesign':
-				// Auto-trigger initialize Superdesign command
-				console.log('🚀 Received initializeSuperdesign command from webview');
-				vscode.commands.executeCommand('superdesign.initializeProject');
+			case 'initializetad':
+				// Auto-trigger initialize tad command
+				console.log('🚀 Received initializetad command from webview');
+				vscode.commands.executeCommand('tad.initializeProject');
 				break;
 
             case 'listTemplates':
@@ -1775,7 +1775,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 // Function to configure Anthropic API key
 async function configureAnthropicApiKey() {
-	const currentKey = vscode.workspace.getConfiguration('superdesign').get<string>('anthropicApiKey');
+	const currentKey = vscode.workspace.getConfiguration('tad').get<string>('anthropicApiKey');
 
 	const input = await vscode.window.showInputBox({
 		title: 'Configure Anthropic API Key',
@@ -1801,7 +1801,7 @@ async function configureAnthropicApiKey() {
 		// Only update if user didn't just keep the masked value
 		if (input !== '••••••••••••••••') {
 			try {
-				await vscode.workspace.getConfiguration('superdesign').update(
+				await vscode.workspace.getConfiguration('tad').update(
 					'anthropicApiKey', 
 					input.trim(), 
 					vscode.ConfigurationTarget.Global
@@ -1820,7 +1820,7 @@ async function configureAnthropicApiKey() {
 
 // Function to configure OpenAI API key
 async function configureOpenAIApiKey() {
-	const currentKey = vscode.workspace.getConfiguration('superdesign').get<string>('openaiApiKey');
+	const currentKey = vscode.workspace.getConfiguration('tad').get<string>('openaiApiKey');
 
 	const input = await vscode.window.showInputBox({
 		title: 'Configure OpenAI API Key',
@@ -1846,7 +1846,7 @@ async function configureOpenAIApiKey() {
 		// Only update if user didn't just keep the masked value
 		if (input !== '••••••••••••••••') {
 			try {
-				await vscode.workspace.getConfiguration('superdesign').update(
+				await vscode.workspace.getConfiguration('tad').update(
 					'openaiApiKey', 
 					input.trim(), 
 					vscode.ConfigurationTarget.Global
@@ -1865,7 +1865,7 @@ async function configureOpenAIApiKey() {
 
 // Function to configure OpenRouter API key
 async function configureOpenRouterApiKey() {
-	const currentKey = vscode.workspace.getConfiguration('superdesign').get<string>('openrouterApiKey');
+	const currentKey = vscode.workspace.getConfiguration('tad').get<string>('openrouterApiKey');
 
 	const input = await vscode.window.showInputBox({
 		title: 'Configure OpenRouter API Key',
@@ -1891,7 +1891,7 @@ async function configureOpenRouterApiKey() {
 		// Only update if user didn't just keep the masked value
 		if (input !== '••••••••••••••••') {
 			try {
-				await vscode.workspace.getConfiguration('superdesign').update(
+				await vscode.workspace.getConfiguration('tad').update(
 					'openrouterApiKey', 
 					input.trim(), 
 					vscode.ConfigurationTarget.Global
@@ -1908,9 +1908,9 @@ async function configureOpenRouterApiKey() {
 	}
 }
 
-class SuperdesignCanvasPanel {
-	public static currentPanel: SuperdesignCanvasPanel | undefined;
-	public static readonly viewType = 'superdesignCanvasPanel';
+class tadCanvasPanel {
+	public static currentPanel: tadCanvasPanel | undefined;
+	public static readonly viewType = 'tadCanvasPanel';
 
 	private readonly _panel: vscode.WebviewPanel;
 	private readonly _extensionUri: vscode.Uri;
@@ -1922,14 +1922,14 @@ class SuperdesignCanvasPanel {
 	public static createOrShow(extensionUri: vscode.Uri, sidebarProvider: ChatSidebarProvider) {
 		const column = vscode.window.activeTextEditor?.viewColumn;
 
-		if (SuperdesignCanvasPanel.currentPanel) {
-			SuperdesignCanvasPanel.currentPanel._panel.reveal(column);
+		if (tadCanvasPanel.currentPanel) {
+			tadCanvasPanel.currentPanel._panel.reveal(column);
 			return;
 		}
 
 		const panel = vscode.window.createWebviewPanel(
-			SuperdesignCanvasPanel.viewType,
-			'Superdesign Canvas',
+			tadCanvasPanel.viewType,
+            'Tad Canvas',
 			column || vscode.ViewColumn.One,
 			{
 				enableScripts: true,
@@ -1940,7 +1940,7 @@ class SuperdesignCanvasPanel {
 			}
 		);
 
-		SuperdesignCanvasPanel.currentPanel = new SuperdesignCanvasPanel(panel, extensionUri, sidebarProvider);
+		tadCanvasPanel.currentPanel = new tadCanvasPanel(panel, extensionUri, sidebarProvider);
 	}
 
 	private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, sidebarProvider: ChatSidebarProvider) {
@@ -2010,7 +2010,7 @@ class SuperdesignCanvasPanel {
 	}
 
 	public dispose() {
-		SuperdesignCanvasPanel.currentPanel = undefined;
+		tadCanvasPanel.currentPanel = undefined;
 		
         // Dispose of file watchers
         if (this._fileWatchers && this._fileWatchers.length) {
@@ -2033,19 +2033,19 @@ class SuperdesignCanvasPanel {
 			return;
 		}
 
-        const iterationsPattern = new vscode.RelativePattern(
-            workspaceFolder,
-            '.superdesign/design_iterations/**/*.{html,svg,css}'
-        );
-        const distPattern = new vscode.RelativePattern(
-            workspaceFolder,
-            '.superdesign/dist/**/*.{html,svg,css}'
-        );
+		const iterationsPattern = new vscode.RelativePattern(
+			workspaceFolder,
+			'.tad/design_iterations/**/*.{html,svg,css}'
+		);
+		const distPattern = new vscode.RelativePattern(
+			workspaceFolder,
+			'.tad/dist/**/*.{html,svg,css}'
+		);
 
-        const manifestPattern = new vscode.RelativePattern(
-            workspaceFolder,
-            '.superdesign/dist/manifest.json'
-        );
+		const manifestPattern = new vscode.RelativePattern(
+			workspaceFolder,
+			'.tad/dist/manifest.json'
+		);
 
         const watchers = [
             vscode.workspace.createFileSystemWatcher(iterationsPattern, false, false, false),
@@ -2096,14 +2096,14 @@ class SuperdesignCanvasPanel {
         try {
             const ws = vscode.workspace.workspaceFolders?.[0];
             if (!ws) return null;
-            const uri = vscode.Uri.joinPath(ws.uri, '.superdesign', 'spaces.json');
+			const uri = vscode.Uri.joinPath(ws.uri, '.tad', 'spaces.json');
 
             let fileContent: Uint8Array;
             try {
                 fileContent = await vscode.workspace.fs.readFile(uri);
             } catch (e) {
                 const message = e instanceof Error ? e.message : String(e);
-                const error = `Could not read .superdesign/spaces.json: ${message}`;
+				const error = `Could not read .tad/spaces.json: ${message}`;
                 Logger.warn?.(`[CanvasExt] ${error}`);
                 return { spaces: [], defaultSpace: undefined, error };
             }
@@ -2113,14 +2113,14 @@ class SuperdesignCanvasPanel {
                 json = JSON.parse(Buffer.from(fileContent).toString('utf8'));
             } catch (e) {
                 const message = e instanceof Error ? e.message : String(e);
-                const error = `Invalid JSON in .superdesign/spaces.json: ${message}`;
+				const error = `Invalid JSON in .tad/spaces.json: ${message}`;
                 Logger.warn?.(`[CanvasExt] ${error}`);
                 return { spaces: [], defaultSpace: undefined, error };
             }
 
             const rawSpaces = Array.isArray(json?.spaces) ? json.spaces : null;
             if (!Array.isArray(rawSpaces)) {
-                const error = `Invalid .superdesign/spaces.json: "spaces" must be an array.`;
+				const error = `Invalid .tad/spaces.json: "spaces" must be an array.`;
                 Logger.warn?.(`[CanvasExt] ${error}`);
                 return { spaces: [], defaultSpace: typeof json?.defaultSpace === 'string' ? json.defaultSpace : undefined, error };
             }
@@ -2135,7 +2135,7 @@ class SuperdesignCanvasPanel {
                 .filter(s => s.name && s.templateRoot && s.distDir);
 
             if (mapped.length === 0) {
-                const error = `No valid spaces found in .superdesign/spaces.json. Each space requires "name", "templateRoot", and "distDir".`;
+				const error = `No valid spaces found in .tad/spaces.json. Each space requires "name", "templateRoot", and "distDir".`;
                 Logger.warn?.(`[CanvasExt] ${error}`);
                 return { spaces: [], defaultSpace: typeof json?.defaultSpace === 'string' ? json.defaultSpace : undefined, error };
             }
@@ -2143,7 +2143,7 @@ class SuperdesignCanvasPanel {
             return { spaces: mapped, defaultSpace: typeof json?.defaultSpace === 'string' ? json.defaultSpace : undefined };
         } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
-            const error = `Unexpected error reading .superdesign/spaces.json: ${message}`;
+				const error = `Unexpected error reading .tad/spaces.json: ${message}`;
             Logger.warn?.(`[CanvasExt] ${error}`);
             return { spaces: [], defaultSpace: undefined, error };
         }
@@ -2168,7 +2168,7 @@ class SuperdesignCanvasPanel {
         if (!cfg || (cfg && cfg.spaces.length === 0)) {
             const errorMessage = cfg?.error
                 ? cfg.error
-                : 'No template spaces configured. Create a valid .superdesign/spaces.json.';
+                : 'No template spaces configured. Create a valid .tad/spaces.json.';
             this._panel.webview.postMessage({ command: 'error', data: { error: errorMessage } });
         }
     }
@@ -2203,7 +2203,7 @@ class SuperdesignCanvasPanel {
 				<meta charset="UTF-8">
                 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data: https: vscode-webview:; font-src ${webview.cspSource} data:; script-src 'nonce-${nonce}'; frame-src ${webview.cspSource} data: blob: https: http: vscode-webview:; child-src ${webview.cspSource} data: blob: https: http: vscode-webview:;">
 				<meta name="viewport" content="width=device-width, initial-scale=1.0">
-				<title>Superdesign Canvas</title>
+                <title>Tad Canvas</title>
 			</head>
 			<body>
 				<div id="root" data-view="canvas" data-nonce="${nonce}"></div>
@@ -2334,7 +2334,7 @@ class SuperdesignCanvasPanel {
                 } else {
                     const errorMessage = cfg?.error
                         ? cfg.error
-                        : 'No template spaces configured. Create .superdesign/spaces.json.';
+                        : 'No template spaces configured. Create .tad/spaces.json.';
                     this._panel.webview.postMessage({ command: 'error', data: { error: errorMessage } });
                     return;
                 }
@@ -2343,14 +2343,14 @@ class SuperdesignCanvasPanel {
                 designFolder = vscode.Uri.joinPath(base!, ...sub);
                 Logger.debug(`[CanvasExt] designFolder='${designFolder.fsPath}'`);
             } else {
-                designFolder = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'design_iterations');
+                designFolder = vscode.Uri.joinPath(workspaceFolder.uri, '.tad', 'design_iterations');
                 Logger.debug(`[CanvasExt] iterations designFolder='${designFolder.fsPath}'`);
             }
 			
             // Check if the target folder exists
             if (options?.kind === 'groups' && source === 'dist') {
                 // For groups, ensure at least one of pages/components exists within the selected space's dist directory
-                const baseDist = distBaseDir || vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist');
+                const baseDist = distBaseDir || vscode.Uri.joinPath(workspaceFolder.uri, '.tad', 'dist');
                 const pagesDir = vscode.Uri.joinPath(baseDist, 'pages');
                 const componentsDir = vscode.Uri.joinPath(baseDist, 'components');
                 let hasAny = false;
@@ -2359,7 +2359,7 @@ class SuperdesignCanvasPanel {
                 if (!hasAny) {
                     this._panel.webview.postMessage({
                         command: 'error',
-                        data: { error: `No build output found at ${baseDist.fsPath}. Use the "Build Templates (Superdesign)" command to generate build output (this will auto-seed a builder if bundled).` }
+				data: { error: `No build output found at ${baseDist.fsPath}. Use the "Build Templates (tad)" command to generate build output (this will auto-seed a builder if bundled).` }
                     });
                     return;
                 }
@@ -2371,14 +2371,14 @@ class SuperdesignCanvasPanel {
                         // Don't create dist folders; instruct user to build
                         this._panel.webview.postMessage({
                             command: 'error',
-                            data: { error: `No build output found at ${designFolder.fsPath}. Use the "Build Templates (Superdesign)" command to generate build output (this will auto-seed a builder if bundled).` }
+				data: { error: `No build output found at ${designFolder.fsPath}. Use the "Build Templates (tad)" command to generate build output (this will auto-seed a builder if bundled).` }
                         });
                         return;
                     } else {
                         // For design_iterations, create it if missing
                         try {
                             await vscode.workspace.fs.createDirectory(designFolder);
-                            Logger.info('Created .superdesign/design_iterations directory');
+                            Logger.info('Created .tad/design_iterations directory');
                         } catch (createError) {
                             this._panel.webview.postMessage({
                                 command: 'error',
@@ -2412,7 +2412,7 @@ class SuperdesignCanvasPanel {
                 let fileUrisWithNames: Array<[vscode.Uri, string]> = [];
                 if (options?.kind === 'groups' && source === 'dist') {
                     // Read from both pages and components within the selected space's dist directory
-                    const base = distBaseDir || vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist');
+                    const base = distBaseDir || vscode.Uri.joinPath(workspaceFolder.uri, '.tad', 'dist');
                     const pagesDir = vscode.Uri.joinPath(base, 'pages');
                     const componentsDir = vscode.Uri.joinPath(base, 'components');
                     try {
@@ -2432,7 +2432,7 @@ class SuperdesignCanvasPanel {
                 let canvasMetadata: any | null = null;
                 if (source === 'dist') {
                     try {
-                        const manifestUri = distBaseDir ? vscode.Uri.joinPath(distBaseDir, 'manifest.json') : vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist', 'manifest.json');
+                        const manifestUri = distBaseDir ? vscode.Uri.joinPath(distBaseDir, 'manifest.json') : vscode.Uri.joinPath(workspaceFolder.uri, '.tad', 'dist', 'manifest.json');
                         const buf = await vscode.workspace.fs.readFile(manifestUri);
                         manifest = JSON.parse(Buffer.from(buf).toString('utf8'));
                         Logger.debug(`[CanvasExt] read manifest.json with ${Object.keys(manifest || {}).length} entries`);
@@ -2440,7 +2440,7 @@ class SuperdesignCanvasPanel {
                         Logger.warn(`[CanvasExt] No manifest.json found for selected build: ${e instanceof Error ? e.message : String(e)}`);
                     }
                     try {
-                        const metaUri = distBaseDir ? vscode.Uri.joinPath(distBaseDir, 'canvas-metadata.json') : vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist', 'canvas-metadata.json');
+                        const metaUri = distBaseDir ? vscode.Uri.joinPath(distBaseDir, 'canvas-metadata.json') : vscode.Uri.joinPath(workspaceFolder.uri, '.tad', 'dist', 'canvas-metadata.json');
                         const buf = await vscode.workspace.fs.readFile(metaUri);
                         canvasMetadata = JSON.parse(Buffer.from(buf).toString('utf8'));
                         Logger.debug(`[CanvasExt] read canvas-metadata.json with ${Object.keys(canvasMetadata || {}).length} entries`);
@@ -2451,8 +2451,8 @@ class SuperdesignCanvasPanel {
 
             // Determine base for relative display names
             const namingBase = (source === 'dist')
-                ? (distBaseDir || vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist'))
-                : vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'design_iterations');
+                ? (distBaseDir || vscode.Uri.joinPath(workspaceFolder.uri, '.tad', 'dist'))
+                : vscode.Uri.joinPath(workspaceFolder.uri, '.tad', 'design_iterations');
 
 				const loadedFiles = await Promise.all(
                 fileUrisWithNames.map(async ([filePath, fileName]) => {

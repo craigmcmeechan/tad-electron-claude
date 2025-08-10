@@ -431,11 +431,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
         markAsReturningUser();
         console.log('👋 User clicked Get Started, welcome dismissed');
         
-        // Auto-trigger initialize Superdesign command
+        // Auto-trigger initialize Tad command
         vscode.postMessage({
-            command: 'initializeSuperdesign'
+            command: 'initializetad'
         });
-        console.log('🚀 Auto-triggering Initialize Superdesign command');
+        console.log('🚀 Auto-triggering Initialize Tad command');
     };
 
     // Drag and drop handlers
@@ -890,8 +890,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
                                         displayFileName = `${paths.length} images in moodboard`;
                                     } else {
                                         // Single image - show just filename
-                                        displayFileName = contextFile.includes('.superdesign') 
-                                            ? contextFile.split('.superdesign/')[1] || contextFile.split('/').pop() || contextFile
+                                        displayFileName = contextFile.includes('.tad') 
+                                            ? contextFile.split('.tad/')[1] || contextFile.split('/').pop() || contextFile
                                             : contextFile.split('/').pop() || contextFile;
                                     }
                                     
@@ -1358,11 +1358,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
             <div className="chat-placeholder__content">
                 <div className="empty-state-message">
                     <p>
-                                <strong>Cursor/Windsurf rules already added</strong>, prompt your tool to design UI like <kbd>Help me design a calculator UI</kbd> and preview the UI in Superdesign canvas by <kbd>Cmd+Shift+P</kbd> <code>'Superdesign: Open canvas view'</code>
+                                <strong>Cursor/Windsurf rules already added</strong>, prompt your tool to design UI like <kbd>Help me design a calculator UI</kbd> and preview the UI in Tad canvas by <kbd>Cmd+Shift+P</kbd> <code>'tad: Open canvas view'</code>
                     </p>
                     <div className="empty-state-divider">OR</div>
                     <p>
-                        You can start with native superdesign agent chat below <em>(We have better UX)</em>
+                        You can start with native tad agent chat below <em>(We have better UX)</em>
                     </p>
                 </div>
             </div>
@@ -1414,7 +1414,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
                 {layout === 'panel' && showTemplates && (
                     <div className="template-panel" style={{ borderBottom: '1px solid var(--vscode-panel-border)', padding: '8px 12px', display: 'grid', gridTemplateColumns: '260px 1fr', gap: 12 }}>
                         <div className="template-list" style={{ maxHeight: 220, overflow: 'auto', borderRight: '1px solid var(--vscode-panel-border)', paddingRight: 12 }}>
-                            <div style={{ fontWeight: 600, marginBottom: 6 }}>Templates in .superdesign</div>
+                            <div style={{ fontWeight: 600, marginBottom: 6 }}>Templates in .tad</div>
                             {templates.length === 0 ? (
                                 <div style={{ color: 'var(--vscode-descriptionForeground)' }}>No prompts.*.md found</div>
                             ) : (
@@ -1477,8 +1477,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ layout, vscode }) => {
                                     {currentContext.type === 'image' ? 'Image: ' : currentContext.type === 'images' ? 'Images: ' : 'Context: '}
                                     {currentContext.type === 'images' ? 
                                         `${currentContext.fileName.split(', ').length} images in moodboard` :
-                                        (currentContext.fileName.includes('.superdesign') 
-                                            ? currentContext.fileName.split('.superdesign/')[1] || currentContext.fileName.split('/').pop() || currentContext.fileName
+                                        (currentContext.fileName.includes('.tad') 
+                                            ? currentContext.fileName.split('.tad/')[1] || currentContext.fileName.split('/').pop() || currentContext.fileName
                                             : currentContext.fileName.split('/').pop() || currentContext.fileName
                                         )
                                     }

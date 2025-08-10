@@ -1,6 +1,6 @@
 # Change Log
 
-All notable changes to the "superdesign" extension will be documented in this file.
+All notable changes to the "tad" extension will be documented in this file.
 
 
 ## [0.0.8] - 2025-07-01
@@ -32,7 +32,7 @@ All notable changes to the "superdesign" extension will be documented in this fi
 
 ### Added
 - Default style sheet integration for enhanced design consistency
-- Project initialization command (`superdesign.initializeProject`)
+- Project initialization command (`tad.initializeProject`)
 - CSS file loading support for custom styling
 - Copy file path functionality in Design Frame component
 
@@ -81,7 +81,7 @@ All notable changes to the "superdesign" extension will be documented in this fi
 ## [0.0.1] - 2025-06-24
 
 ### Added
-- Initial release of Super Design VS Code extension
+- Initial release of tad VS Code extension
 - Interactive chat interface with AI assistance
 - Canvas view for visual design layout
 - Design frame components for organizing content

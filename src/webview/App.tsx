@@ -105,7 +105,7 @@ const App: React.FC = () => {
     console.log('🔄 App rendering, currentView:', currentView);
 
     return (
-        <div className={`superdesign-app ${currentView}-view ${context?.layout ? `${context.layout}-layout` : ''}`}>
+        <div className={`tad-app ${currentView}-view ${context?.layout ? `${context.layout}-layout` : ''}`}>
             {renderView()}
         </div>
     );

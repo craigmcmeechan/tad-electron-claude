@@ -1,6 +1,6 @@
-### Superdesign Template Engine and Builder
+### Tad Template Engine and Builder
 
-This document describes the behavior and conventions of the Superdesign template builder located at `.superdesign/builder/build.js`. It is intended for technical users and model agents who author templates, configure build spaces, and integrate outputs with the Superdesign Canvas.
+This document describes the behavior and conventions of the Tad template builder located at `.tad/builder/build.js`. It is intended for technical users and model agents who author templates, configure build spaces, and integrate outputs with the Tad Canvas.
 
 ---
 
@@ -14,7 +14,7 @@ The builder compiles Nunjucks-based template systems into browsable HTML outputs
 - Copies a `design-system.css` to each space’s `distDir` and links it from generated HTML
 - Emits a `manifest.json` (template → output mapping, dependencies, relationships, tags) and a `canvas-metadata.json` (tags only) per space, consumed by the Canvas
 
-If `spaces.json` is missing, the builder defaults to a legacy single space rooted at `.superdesign/templates` with output at `.superdesign/dist` and mirrors `pages` into `.superdesign/design_iterations` to support older Canvas flows.
+If `spaces.json` is missing, the builder defaults to a legacy single space rooted at `.tad/templates` with output at `.tad/dist` and mirrors `pages` into `.tad/design_iterations` to support older Canvas flows.
 
 ---
 
@@ -180,7 +180,7 @@ relationships:
 
 Resolution rules:
 
-- Targets may be workspace-relative (`.superdesign/templates/pages/...`), template-root-relative (`pages/...`), or relative to the current file.
+- Targets may be workspace-relative (`.tad/templates/pages/...`), template-root-relative (`pages/...`), or relative to the current file.
 - Extensions can be omitted; the builder tries `['.njk','.nunjucks','.html']`.
 - Only page targets are recorded (references under `components/` or `elements/` are ignored for relationships).
 - On success, each target is normalized into an output-relative key like `pages/{relpath}.html`.
@@ -212,7 +212,7 @@ The Canvas consumes these relationships to power navigation links and graph over
 
 ### Spaces: Multi-root Build Configuration
 
-Spaces enable multi-site or multi-output builds in a single workspace. Define `.superdesign/spaces.json`:
+Spaces enable multi-site or multi-output builds in a single workspace. Define `.tad/spaces.json`:
 
 ```json
 {
@@ -220,13 +220,13 @@ Spaces enable multi-site or multi-output builds in a single workspace. Define `.
   "spaces": [
     {
       "name": "docs",
-      "templateRoot": "./.superdesign/templates",
-      "distDir": "./.superdesign/dist"
+      "templateRoot": "./.tad/templates",
+      "distDir": "./.tad/dist"
     },
     {
       "name": "marketing",
       "templateRoot": "./marketing-site/templates",
-      "distDir": "./marketing-site/.superdesign/dist"
+      "distDir": "./marketing-site/.tad/dist"
     }
   ]
 }
@@ -239,13 +239,13 @@ Builder behavior:
 
 Canvas integration of spaces:
 
-- The extension reads `.superdesign/spaces.json` and exposes space choices to the Canvas, allowing switching between outputs and defaulting to `defaultSpace`.
+- The extension reads `.tad/spaces.json` and exposes space choices to the Canvas, allowing switching between outputs and defaulting to `defaultSpace`.
 
 Legacy mode (no `spaces.json`):
 
-- Builds `.superdesign/templates` → `.superdesign/dist`
-- Copies `dist/pages/**` into `.superdesign/design_iterations/**` for the older Canvas gallery view
-- Copies `dist/design-system.css` to `.superdesign/design-system.css`
+- Builds `.tad/templates` → `.tad/dist`
+- Copies `dist/pages/**` into `.tad/design_iterations/**` for the older Canvas gallery view
+- Copies `dist/design-system.css` to `.tad/design-system.css`
 
 ---
 
@@ -254,7 +254,7 @@ Legacy mode (no `spaces.json`):
 Per-space, the builder attempts to copy a `design-system.css` into the `distDir` root from one of:
 
 1. `{templateRoot}/styles/design-system.css`
-2. `{appDir}/styles/design-system.css` (where `appDir` is `.superdesign/builder`)
+2. `{appDir}/styles/design-system.css` (where `appDir` is `.tad/builder`)
 
 If not found, a warning is logged and pages/component previews will still render (but without the shared stylesheet). Generated wrappers link this stylesheet via a relative href; page templates can reference the provided `designSystemCssHref` variable.
 
@@ -283,15 +283,15 @@ Canvas behavior:
 
 From VS Code (recommended):
 
-- Command: "Superdesign: Build Templates" (`superdesign.buildTemplates`)
-  - Ensures a builder exists in `.superdesign/builder` (syncs from packaged assets if necessary)
+- Command: "tad: Build Templates" (`tad.buildTemplates`)
+  - Ensures a builder exists in `.tad/builder` (syncs from packaged assets if necessary)
   - Detects package manager, installs dependencies on first run, and executes the build
-  - Streams output to the Superdesign output channel and refreshes the Canvas on completion
+  - Streams output to the Tad output channel and refreshes the Canvas on completion
 
 From CLI (fallback):
 
 ```bash
-node .superdesign/builder/build.js
+node .tad/builder/build.js
 ```
 
 Dependencies (as shipped in packaged assets):
@@ -373,11 +373,11 @@ Minimal `canvas-metadata.json`:
 
 ### Legacy Behavior (No spaces.json)
 
-- Source: `.superdesign/templates`
-- Output: `.superdesign/dist`
-- Compatibility copies:
-  - `dist/pages/**` → `.superdesign/design_iterations/**`
-  - `dist/design-system.css` → `.superdesign/design-system.css`
+- Source: `.tad/templates`
+- Output: `.tad/dist`
+ - Compatibility copies:
+  - `dist/pages/**` → `.tad/design_iterations/**`
+  - `dist/design-system.css` → `.tad/design-system.css`
 
 This ensures older Canvas gallery behavior continues to function while you migrate to spaces.
 

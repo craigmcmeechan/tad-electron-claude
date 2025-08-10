@@ -1,75 +1,68 @@
 ### Quality Review
 
 #### Summary
-Superdesign is a well-scoped, modern VS Code extension with clear separation between the extension host and React-based webviews. It leverages the `ai` SDK and exposes a practical tool layer for file and system operations. Build tooling and project structure are straightforward and consistent.
+Tad has been narrowed to focus on Nunjucks template workflows in VS Code. Current scope centers on:
+- Nunjucks language features (definition, completion, symbols, diagnostics)
+- Optional Canvas panel for previewing `.tad/dist` outputs (with CSS inlining, spaces, tags/relationships)
+- Optional chat sidebar powered by the `ai` SDK with a small, scoped toolset
+
+Build tooling (esbuild + TypeScript), structure, and messaging remain clean and maintainable.
+
+Note on scope changes: legacy/experimental functionality outside this Nunjucks/builder/canvas/chat flow has been removed. The extension no longer ships large bundled frameworks from earlier iterations and keeps the surface area intentionally small.
 
 ---
 
 ### Strengths
-- Modern, simple build pipeline (esbuild + TypeScript); fast local iteration with watch scripts
-- Clean layering:
-  - Extension host (commands, config, AI service, file I/O tools)
-  - Webviews (Chat sidebar and Canvas panel) with a single webview bundle
-  - Explicit messaging protocol (postMessage) and streaming handling
-- Provider-agnostic AI integration via `ai` SDK with flexible model selection and streaming tool calls
-- Strong developer UX features:
-  - Automatic Canvas open/status handshake
-  - File watcher for `.superdesign/design_iterations` to refresh previews
-  - Theming tool and design scaffolding (`initializeSuperdesignProject`)
-- Logging and observability via `Logger` output channel
-- Reasonable linting and strict TS settings (skipLibCheck, strict true)
+- Nunjucks language support is practical and fast:
+  - Cross-root indexing and watching via `TemplateIndex`
+  - Target resolution via `TemplateResolver` for `{% include|import|extends %}`
+  - Document symbols for blocks/macros; path completion; real-time diagnostics including relationship annotations
+- Clear layering:
+  - Extension host (commands, configuration, Nunjucks features, builder orchestration, AI tool broker)
+  - Webviews (Chat sidebar, Canvas panel) sharing a single bundle
+  - Explicit postMessage protocol with streaming support
+- Canvas/builder integration is optional but useful:
+  - Watches `.tad/dist` and `.tad/design_iterations`; inlines local CSS for fidelity
+  - Optional manifest/metadata mapping for template→output and tags/relationships
+- Lightweight AI integration via `ai` SDK with model selection; tool surface is constrained and auditable
+- Developer ergonomics: `Logger` output channel, commands for syncing a packaged builder, creating template spaces, and initializing project scaffolding
 
 ### Weaknesses / Risks
-- Security and secret handling
-  - API keys stored in regular VS Code settings, not the secure secret storage
-  - Hardcoded external keys in code:
-    - Supabase anon key in `src/extension.ts` (submitEmailToSupabase)
-    - Helicone proxy keys in `CustomAgentService` for Anthropic and OpenAI
-  - CSP for chat webview allows `'unsafe-inline'` scripts; recommend using nonced scripts only
-- Compliance and network posture
-  - Outbound calls to Supabase via embedded domain
-  - Default AI endpoints can be proxied through Helicone; this may be unintended in enterprise contexts
-- Dependency footprint
-  - React 19 webview with several UI libs; ensure periodic update policy
-  - Removed legacy `@anthropic-ai/claude-code` copy to reduce size and avoid unsupported Windows pathing
-- Error handling
-  - Good handling for API key errors, but other failures (e.g., network) mostly show generic messages
-- Tests
-  - Test scripts exist but there’s no visible CI definition in repo; unclear coverage level
+- Secrets and network posture
+  - API keys live in VS Code settings (not `SecretStorage`)
+  - Hardcoded external keys/routes exist in source:
+    - Supabase anon key in `src/extension.ts` (newsletter/email capture)
+    - Helicone proxy headers in `CustomAgentService` for OpenAI routing
+- Webview CSP
+  - Chat HTML uses `'unsafe-inline'` in CSP; Canvas uses a stricter nonce-based policy
+- Compliance
+  - Outbound calls to Supabase and optional Helicone proxying may be unacceptable in some environments
+- Testing/CI
+  - No visible CI. Limited automated tests for providers, Canvas, or Nunjucks flows
 
 ### Immediate Remediations (High Priority)
-- Secrets
-  - Move all API keys to `vscode.SecretStorage` and never echo partial keys in logs/UI
-  - Remove Helicone keys from source; allow opt-in via settings/env and document
-  - Externalize Supabase anon key to configuration (or remove newsletter capture from the extension)
+- Secrets & endpoints
+  - Migrate API keys to `vscode.SecretStorage`; do not log key prefixes
+  - Remove hardcoded Helicone credentials and make proxy opt‑in via settings
+  - Remove or gate Supabase email capture; externalize key to settings if retained
 - Webview CSP
-  - Remove `'unsafe-inline'` from chat webview; adopt nonce-based script loading consistently (Canvas already uses nonce)
-- Telemetry/Endpoints
-  - Document all third-party endpoints and add settings to disable outbound analytics/proxies
+  - Drop `'unsafe-inline'` in chat webview; adopt nonce-based loading (Canvas pattern)
+- Documentation
+  - Document all third‑party endpoints and provide a global "disable external calls" setting
 
 ### Short-Term Improvements
-- Add CI (GitHub Actions) for:
-  - Type check, ESLint, build on PR
-  - Run test suites (`test:tools`, `test:agent`, etc.)
-- Harden tools
-  - Expand bash-tool unsafe patterns and add allowlist mode for enterprise
-  - Enforce max file sizes and path constraints in read/write/edit
-- UX
-  - Provide explicit command to open the design folder in explorer
-  - Expose a command to purge `.superdesign/moodboard` safely
+- CI: type-check, ESLint, build on PR; basic webview and provider tests
+- Tools hardening: tighten bash/read/write/edit constraints (path allowlists, file size caps)
+- Nunjucks UX: offer completion inside relationship annotations; add quick‑fixes for unresolved targets
+- Commands: add command to open `.tad/` and to purge `.tad/moodboard` safely
 
 ### Medium-Term Opportunities
-- Configuration
-  - Support workspace-level JSON config for provider/model and per-project overrides
-  - Optional encryption for on-disk assets if compliance requires
-- Observability
-  - Structured event logging for tool calls (duration, success/error, file targets) with user consent
-- Testing
-  - Add component tests for `ChatInterface` rendering and tool message flows
-  - Add integration tests for initialization and Canvas file watching/inlining
+- Configuration: workspace-level JSON for provider/model overrides; safer defaults
+- Observability: structured event logs for tool calls (duration, success/error, file targets) with user consent
+- Canvas performance: continue virtualization/culling improvements for very large graphs
 
 ### Executive View (Risk vs. Readiness)
-- Product is feature-complete for internal pilot: Yes
-- Key risks: secret handling in source, CSP looseness, hardcoded external endpoints
-- Time to remediate high-priority items: ~2–3 engineering days
-- Confidence after remediation: High for internal use; ready for marketplace submission subject to security pass
+- Feature set appropriate for a focused, template-centric extension
+- Key risks: secret handling, CSP looseness, hardcoded external endpoints
+- Remediation time for high‑priority items: ~2–3 engineering days
+- After remediation: suitable for internal pilots; marketplace readiness pending security review

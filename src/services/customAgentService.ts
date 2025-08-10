@@ -35,28 +35,28 @@ export class CustomAgentService implements AgentService {
             this.outputChannel.appendLine(`Workspace root detected: ${workspaceRoot}`);
             
             if (workspaceRoot) {
-                // Create .superdesign folder in workspace root
-                const superdesignDir = path.join(workspaceRoot, '.superdesign');
-                this.outputChannel.appendLine(`Setting up .superdesign directory at: ${superdesignDir}`);
+                // Create .tad folder in workspace root
+                const tadDir = path.join(workspaceRoot, '.tad');
+                this.outputChannel.appendLine(`Setting up .tad directory at: ${tadDir}`);
                 
                 // Create directory if it doesn't exist
-                if (!fs.existsSync(superdesignDir)) {
-                    fs.mkdirSync(superdesignDir, { recursive: true });
-                    this.outputChannel.appendLine(`Created .superdesign directory: ${superdesignDir}`);
+                if (!fs.existsSync(tadDir)) {
+                    fs.mkdirSync(tadDir, { recursive: true });
+                    this.outputChannel.appendLine(`Created .tad directory: ${tadDir}`);
                 } else {
-                    this.outputChannel.appendLine(`.superdesign directory already exists: ${superdesignDir}`);
+                    this.outputChannel.appendLine(`.tad directory already exists: ${tadDir}`);
                 }
                 
-                this.workingDirectory = superdesignDir;
+                this.workingDirectory = tadDir;
                 this.outputChannel.appendLine(`Working directory set to: ${this.workingDirectory}`);
             } else {
                 this.outputChannel.appendLine('No workspace root found, using fallback');
                 // Fallback to OS temp directory if no workspace
-                const tempDir = path.join(os.tmpdir(), 'superdesign-custom');
+                const tempDir = path.join(os.tmpdir(), 'tad-custom');
                 
                 if (!fs.existsSync(tempDir)) {
                     fs.mkdirSync(tempDir, { recursive: true });
-                    this.outputChannel.appendLine(`Created temporary superdesign directory: ${tempDir}`);
+                    this.outputChannel.appendLine(`Created temporary tad directory: ${tempDir}`);
                 }
                 
                 this.workingDirectory = tempDir;
@@ -78,7 +78,7 @@ export class CustomAgentService implements AgentService {
     }
 
     private getModel() {
-        const config = vscode.workspace.getConfiguration('superdesign');
+        const config = vscode.workspace.getConfiguration('tad');
         const specificModel = config.get<string>('aiModel');
         const provider = config.get<string>('aiModelProvider', 'anthropic');
         
@@ -140,7 +140,7 @@ export class CustomAgentService implements AgentService {
     }
 
     private getSystemPrompt(): string {
-        const config = vscode.workspace.getConfiguration('superdesign');
+        const config = vscode.workspace.getConfiguration('tad');
         const specificModel = config.get<string>('aiModel');
         const provider = config.get<string>('aiModelProvider', 'anthropic');
         
@@ -164,11 +164,11 @@ export class CustomAgentService implements AgentService {
         }
         
         return `# Role
-You are superdesign, a senior frontend designer integrated into VS Code as part of the Super Design extension.
+You are tad, a senior frontend designer integrated into VS Code as part of the tad extension.
 Your goal is to help user generate amazing design using code
 
 # Current Context
-- Extension: Super Design (Design Agent for VS Code)
+- Extension: tad (Design Agent for VS Code)
 - AI Model: ${modelName}
 - Working directory: ${this.workingDirectory}
 
@@ -181,9 +181,9 @@ Your goal is to help user generate amazing design using code
 - You should ALWAYS use tools above for write/edit html files, don't just output in a message, always do tool calls
 
 ## Styling
-1. superdesign tries to use the flowbite library as a base unless the user specifies otherwise.
-2. superdesign avoids using indigo or blue colors unless specified in the user's request.
-3. superdesign MUST generate responsive designs.
+1. tad tries to use the flowbite library as a base unless the user specifies otherwise.
+2. tad avoids using indigo or blue colors unless specified in the user's request.
+3. tad MUST generate responsive designs.
 4. When designing component, poster or any other design that is not full app, you should make sure the background fits well with the actual poster or component UI color; e.g. if component is light then background should be dark, vice versa.
 5. Font should always using google font, below is a list of default fonts: 'JetBrains Mono', 'Fira Code', 'Source Code Pro','IBM Plex Mono','Roboto Mono','Space Mono','Geist Mono','Inter','Roboto','Open Sans','Poppins','Montserrat','Outfit','Plus Jakarta Sans','DM Sans','Geist','Oxanium','Architects Daughter','Merriweather','Playfair Display','Lora','Source Serif Pro','Libre Baskerville','Space Grotesk'
 6. When creating CSS, make sure you include !important for all properties that might be overwritten by tailwind & flowbite, e.g. h1, body, etc.
@@ -860,7 +860,7 @@ I've created the html design, please reveiw and let me know if you need any chan
     }
 
     hasApiKey(): boolean {
-        const config = vscode.workspace.getConfiguration('superdesign');
+        const config = vscode.workspace.getConfiguration('tad');
         const specificModel = config.get<string>('aiModel');
         const provider = config.get<string>('aiModelProvider', 'openai');
         

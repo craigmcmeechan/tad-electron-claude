@@ -5,7 +5,7 @@ import { WebviewContext } from '../types/context';
 import { AgentService } from '../types/agent';
 
 export class ChatSidebarProvider implements vscode.WebviewViewProvider {
-    public static readonly VIEW_TYPE = 'superdesign.chatView';
+    public static readonly VIEW_TYPE = 'tad.chatView';
     private _view?: vscode.WebviewView;
     private messageHandler: ChatMessageService;
     private customMessageHandler?: (message: any) => void;
@@ -95,7 +95,7 @@ export class ChatSidebarProvider implements vscode.WebviewViewProvider {
     }
 
     private async handleGetCurrentProvider(webview: vscode.Webview) {
-        const config = vscode.workspace.getConfiguration('superdesign');
+        const config = vscode.workspace.getConfiguration('tad');
         const currentProvider = config.get<string>('aiModelProvider', 'openai');
         const currentModel = config.get<string>('aiModel');
         
@@ -123,7 +123,7 @@ export class ChatSidebarProvider implements vscode.WebviewViewProvider {
 
     private async handleChangeProvider(model: string, webview: vscode.Webview) {
         try {
-            const config = vscode.workspace.getConfiguration('superdesign');
+            const config = vscode.workspace.getConfiguration('tad');
             
             // Determine provider and API key based on model
             let provider: string;
@@ -135,12 +135,12 @@ export class ChatSidebarProvider implements vscode.WebviewViewProvider {
                 // OpenRouter model (contains slash like "openai/gpt-4o")
                 provider = 'openrouter';
                 apiKeyKey = 'openrouterApiKey';
-                configureCommand = 'superdesign.configureOpenRouterApiKey';
+                configureCommand = 'tad.configureOpenRouterApiKey';
                 displayName = `OpenRouter (${this.getModelDisplayName(model)})`;
             } else {
                 provider = 'openai';
                 apiKeyKey = 'openaiApiKey';
-                configureCommand = 'superdesign.configureOpenAIApiKey';
+                configureCommand = 'tad.configureOpenAIApiKey';
                 displayName = `OpenAI (${this.getModelDisplayName(model)})`;
             }
             

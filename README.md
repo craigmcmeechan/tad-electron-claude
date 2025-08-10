@@ -1,100 +1,100 @@
-#
-### New name required — Template Builder System Integration for VS Code
+## Tad - Template-assisted design for developers
 
-Superdesign now focuses on helping you build and navigate large Nunjucks-based template systems inside VS Code. It indexes your templates, provides smart navigation and completions, validates references, and exposes a simple "Build Templates" command to integrate with your site/app builder. Optional template-to-output mapping lets you jump from compiled files back to their source templates.
-
----
-
-### Key features
-
-- **Nunjucks language support**
-  - Go to definition for `include`, `import`, and `extends` targets
-  - Document symbols for blocks/macros to improve Outline/Go to Symbol
-  - Filename/path completion across your configured template roots
-  - Real-time diagnostics for unresolved/ignored template references
-
-- **Cross-project template indexing**
-  - Indexes templates across multiple roots via `superdesign.nunjucks.templateRoots`
-  - Watches the workspace and updates suggestions as files change
-
-- **Builder integration (optional)**
-  - Command: "Superdesign: Build Templates" to trigger your build workflow
-  - Supports an optional manifest at `.superdesign/dist/manifest.json` to map compiled outputs back to source templates and components
+Tad implements a comprehensive design process that is friendly to engineers and agents alike, from the comfort of your IDE. It combines a Nunjucks template engine with built-in navigation, auto-complete and validation, with a powerful in-IDE Canvas to visualise your entire application design system, from token to collections. Bring your own coding agent and build a low-fidelity mock system in pure code. No mouse required.
 
 ---
 
-### Getting started
+### Highlights
 
-1. Configure template roots in VS Code Settings → search for "Superdesign":
-   - `superdesign.nunjucks.templateRoots` (default: `.superdesign/templates`, `.`)
-   - `superdesign.nunjucks.defaultExtensions` (default: `.njk`, `.nunjucks`, `.html`)
-   - `superdesign.nunjucks.ignore` (default: ignores `node_modules` and `.superdesign/dist`)
-2. Open any `.njk`/`.nunjucks`/`.html` template and use:
-   - Go to Definition on include/import/extends targets
-   - Symbols in the Outline view
-   - Path completion when typing in quotes
-3. Optional: wire up your build and emit a manifest for template mapping (see below).
+- **Canvas (Webview)**
+  - View your entire application and component library in an IDE pane 
+  - Switch between responsive breakpoints with a single click
+  - Jump directly to a page or component by name
+  - View design structure in page sequence, component group, or by customisable tags
+  - Navigate directly to page and component templates from the renderered design
+  - Supports multiple template spaces for design reference, rapid prototyping, and ideation
+
+- **Nunjucks Language Support**
+  - Go to definition for `include`, `import`, `from`, `extends`
+  - Document symbols (blocks/macros), intelligent path completion
+  - Hover and diagnostics for unresolved references and page relationship annotations
+  - Relationship links for `{# relationships: ... #}` or `{# @rel ... #}` blocks
+  - Group pages and components with tags for visual grouping
+
+- **Builder Integration**
+  - Builds page and component HTML from the Nunjucks template specifications
+  - Packaged builder (Nunjucks → HTML) with component state configurations
+  - Emits `manifest.json` (output → sources, dependencies, relationships, tags)
+  - Emits `canvas-metadata.json` (tags). See [build.md](mdc:build.md) and [template-engine.md](mdc:template-engine.md)
 
 ---
 
-### Template → Output manifest (optional)
+### Quick start
 
-If your builder emits a manifest at `.superdesign/dist/manifest.json`, Superdesign will use it to surface which templates and components produced each compiled file. This enables quick navigation from outputs back to sources during review.
+1) Create a first template space from the context menu (tad: Initialise space)
 
-Schema example (per compiled file path relative to `.superdesign/dist/`):
+2) Begin developing your template system. Follow the samples in the template space for guidelines.
 
-```json
-{
-  "pages/home.html": {
-    "page": { "name": "HomePage", "path": "src/pages/HomePage.tsx" },
-    "components": [
-      { "name": "Header", "path": "src/components/Header.tsx" },
-      { "name": "Hero",   "path": "src/components/Hero.tsx" }
-    ],
-    "elements": [
-      { "name": "Button", "path": "src/ui/Button.tsx" }
-    ]
-  }
-}
-```
+3) Build templates
+   - “Tad: Sync Builder” to seed `.tad/builder/`
+   - “Tad: Build Templates” to compile pages/components
+   - Create a space with “tad: Create Template Space”, or use defaults
 
-Notes:
-- Keys must match file paths your preview or review flow loads (e.g., `pages/*.html`, `components/*.html`).
-- `path` can be absolute or workspace-relative. If omitted, names are shown but files cannot be opened.
+4) Open the Canvas to view
+   - Run “Tad: Open Canvas View” to review designs/outputs
+   - If using the builder, compiled pages/components appear under `.tad/dist/`
 
-See more details in `build.md` under "Build Manifest (for Canvas → Template Mapping)".
-
-### Canvas metadata for tags (optional)
-If your builder emits tags per compiled output at `.superdesign/dist/canvas-metadata.json`, the Canvas will display tag badges and you can organize frames by logical collections.
-
-Example:
-
-```json
-{
-  "pages/home.html": { "tags": ["landing", "marketing", "v1"] },
-  "components/card.html": { "tags": ["ui", "card", "atoms"] }
-}
-```
-
-See `build.md` for the full schema.
+For multi-space or deeper builder details, see [build.md](mdc:build.md) and [template-engine.md](mdc:template-engine.md).
 
 ---
 
 ### Commands
 
-- "Superdesign: Build Templates" — run your template builder workflow.
+- tad: Open Canvas View (`tad.openCanvas`)
+- tad: Open Settings (`tad.openSettings`)
+- tad: Create Template Space (`tad.createTemplateSpace`)
+- tad: Build Templates (`tad.buildTemplates`)
+- tad: Sync Builder (`tad.syncBuilder`)
 
 ---
 
-### Configuration
+### Settings
 
-- `superdesign.nunjucks.templateRoots`: directories to search for templates
-- `superdesign.nunjucks.defaultExtensions`: extensions to resolve when no extension is provided
-- `superdesign.nunjucks.ignore`: glob patterns to exclude from indexing
+- `tad.nunjucks.templateRoots`: default `[".tad/templates", "."]`
+- `tad.nunjucks.defaultExtensions`: default `[".njk", ".nunjucks", ".html"]`
+- `tad.nunjucks.ignore`: default ignores `node_modules` and `.tad/dist`
+
+---
+
+### Template relationships and tags (optional)
+
+- Add page relationships at the very top of a Nunjucks page template:
+  - YAML-in-comment:
+    ```nunjucks
+    {#
+    relationships:
+      next: [pages/2.studyview.0.home]
+      related: [pages/3.library.overview]
+    #}
+    ```
+  - Shorthand:
+    ```nunjucks
+    {# @rel next: pages/2.studyview.0.home #}
+    ```
+- Add tags via frontmatter or inline comment. These appear on the Canvas.
+
+See extraction, resolution, and schema details in [template-engine.md](mdc:template-engine.md).
+
+---
+
+### Requirements
+
+- VS Code ≥ 1.90
+- Node.js 20+ (for local build/dev and the packaged builder)
 
 ---
 
 ### Contributing & License
 
-Contributions are welcome. See `build.md` for local build and development notes. Licensed under MIT.
+Contributions are welcome. See [build.md](mdc:build.md) for local development and testing. Licensed under MIT.
 

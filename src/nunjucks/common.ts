@@ -14,10 +14,10 @@ export type TemplateSpace = {
 };
 
 export function readConfig(): NunjucksConfig {
-  const cfg = vscode.workspace.getConfiguration('superdesign.nunjucks');
+  const cfg = vscode.workspace.getConfiguration('tad.nunjucks');
   const roots = cfg.get<string[]>('templateRoots') ?? ['.'];
   const exts = cfg.get<string[]>('defaultExtensions') ?? ['.njk', '.nunjucks', '.html'];
-  const ignore = cfg.get<string[]>('ignore') ?? ['**/node_modules/**', '.superdesign/dist/**'];
+  const ignore = cfg.get<string[]>('ignore') ?? ['**/node_modules/**', '.tad/dist/**'];
   return { templateRoots: roots, defaultExtensions: exts, ignoreGlobs: ignore };
 }
 
@@ -53,7 +53,7 @@ export async function readSpacesConfig(): Promise<TemplateSpace[] | null> {
   try {
     const ws = vscode.workspace.workspaceFolders?.[0];
     if (!ws) return null;
-    const uri = vscode.Uri.joinPath(ws.uri, '.superdesign', 'spaces.json');
+    const uri = vscode.Uri.joinPath(ws.uri, '.tad', 'spaces.json');
     const buf = await vscode.workspace.fs.readFile(uri);
     const json = JSON.parse(Buffer.from(buf).toString('utf8'));
     const rawSpaces = Array.isArray(json?.spaces) ? json.spaces : null;

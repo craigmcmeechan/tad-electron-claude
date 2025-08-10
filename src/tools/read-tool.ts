@@ -176,7 +176,7 @@ async function processMediaFile(
     const base64Data = buffer.toString('base64');
     const mimeType = mime.lookup(filePath) || 'application/octet-stream';
     
-    // For SuperDesign, we'll return a descriptive message rather than raw base64
+    // For tad, we'll return a descriptive message rather than raw base64
     // The actual file handling would be done by the VS Code webview
     const fileName = path.basename(filePath);
     const fileSize = (buffer.length / 1024).toFixed(1);
@@ -190,11 +190,11 @@ async function processMediaFile(
   }
 
   /**
- * Create SuperDesign read tool with execution context
+ * Create tad read tool with execution context
    */
 export function createReadTool(context: ExecutionContext) {
   return tool({
-    description: 'Read the contents of a file within the SuperDesign workspace. Supports text files, images (PNG, JPG, SVG, etc.), and handles large files with line-range reading.',
+    description: 'Read the contents of a file within the tad workspace. Supports text files, images (PNG, JPG, SVG, etc.), and handles large files with line-range reading.',
     parameters: z.object({
       filePath: z.string().describe('Path to the file to read, relative to the workspace root or absolute path within workspace'),
       startLine: z.number().optional().describe('Optional: Starting line number to read from (1-based). Use with lineCount for large files.'),

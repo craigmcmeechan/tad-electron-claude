@@ -87,7 +87,7 @@ export function useChat(vscode: any): ChatHookResult {
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() => {
         // Initialize with persisted chat history from localStorage
         try {
-            const saved = localStorage.getItem('superdesign-chat-history');
+            const saved = localStorage.getItem('tad-chat-history');
             return saved ? JSON.parse(saved) : [];
         } catch (error) {
             console.warn('Failed to load chat history from localStorage:', error);
@@ -99,7 +99,7 @@ export function useChat(vscode: any): ChatHookResult {
     // Persist chat history to localStorage whenever it changes
     useEffect(() => {
         try {
-            localStorage.setItem('superdesign-chat-history', JSON.stringify(chatHistory));
+            localStorage.setItem('tad-chat-history', JSON.stringify(chatHistory));
         } catch (error) {
             console.warn('Failed to save chat history to localStorage:', error);
         }
@@ -109,7 +109,7 @@ export function useChat(vscode: any): ChatHookResult {
         setChatHistory([]);
         // Also clear from localStorage
         try {
-            localStorage.removeItem('superdesign-chat-history');
+            localStorage.removeItem('tad-chat-history');
         } catch (error) {
             console.warn('Failed to clear chat history from localStorage:', error);
         }

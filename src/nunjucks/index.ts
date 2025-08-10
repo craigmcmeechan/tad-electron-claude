@@ -35,7 +35,7 @@ export function activateNunjucks(context: vscode.ExtensionContext) {
   // React to configuration changes
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('superdesign.nunjucks')) {
+      if (e.affectsConfiguration('tad.nunjucks')) {
         const cfg = readConfig();
         resolver.updateConfig(cfg);
         index.initialize(cfg);

@@ -220,14 +220,14 @@ async function buildSingleSpace(params) {
     const cleaned = target.trim();
     if (!cleaned || cleaned.includes('*')) return null;
     const candidates = [];
-    if (cleaned.startsWith('.superdesign/')) {
+    if (cleaned.startsWith('.tad/')) {
       const absBase = path.resolve(workspaceRoot, cleaned);
       candidates.push(absBase);
     }
     if (/^(pages|components|elements)\//.test(cleaned)) {
       candidates.push(path.resolve(templateDir, cleaned));
     }
-    if (!path.isAbsolute(cleaned) && !cleaned.startsWith('.superdesign/') && !/^(pages|components|elements)\//.test(cleaned)) {
+    if (!path.isAbsolute(cleaned) && !cleaned.startsWith('.tad/') && !/^(pages|components|elements)\//.test(cleaned)) {
       candidates.push(path.resolve(path.dirname(currentFile), cleaned));
     }
     for (const base of candidates) {
@@ -403,7 +403,7 @@ async function buildSingleSpace(params) {
 }
 
 async function main() {
-  const root = path.resolve(__dirname, '..'); // .superdesign
+  const root = path.resolve(__dirname, '..'); // .tad
   const appDir = path.resolve(__dirname);
   const workspaceRoot = path.resolve(root, '..');
 

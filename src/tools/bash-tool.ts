@@ -158,7 +158,7 @@ async function executeCommand(
 
 export function createBashTool(context: ExecutionContext) {
   return tool({
-    description: 'Execute shell/bash commands within the SuperDesign workspace. Supports timeouts, output capture, and secure execution.',
+    description: 'Execute shell/bash commands within the tad workspace. Supports timeouts, output capture, and secure execution.',
     parameters: bashParametersSchema,
     execute: async (params): Promise<ToolResponse> => {
       try {

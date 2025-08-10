@@ -35,7 +35,7 @@ Semicolon-terminated - Each property must end with ;
 You can add more relevant ones based on use cases, but make sure to include all the above classes.`;
 
   /**
- * Create SuperDesign read tool with execution context
+ * Create tad read tool with execution context
    */
 export function createThemeTool(context: ExecutionContext) {
   return tool({

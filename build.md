@@ -47,20 +47,20 @@ The `test` script invokes `vscode-test` runner setup.
 1. Open this folder in VS Code/Cursor
 2. Press F5 (Run Extension) or use the “Run and Debug” panel to launch an Extension Development Host
 3. In the dev host:
-   - Open the “Superdesign” activity bar icon
-   - Use command palette to run `Superdesign: Show Chat Sidebar` or `Superdesign: Open Canvas View`
+   - Open the “Tad” activity bar icon
+   - Use command palette to run `tad: Show Chat Sidebar` or `tad: Open Canvas View`
 
 #### Configuration (API Keys and Model)
-- Open VS Code Settings → search for "Superdesign"
-  - `superdesign.aiModelProvider`: `openai` (default), `openrouter`
-  - `superdesign.aiModel`: model id (e.g., `gpt-4o`, `openrouter/auto`)
-  - `superdesign.openaiApiKey`, `superdesign.openrouterApiKey`
+- Open VS Code Settings → search for "Tad"
+  - `tad.aiModelProvider`: `openai` (default), `openrouter`
+  - `tad.aiModel`: model id (e.g., `gpt-4o`, `openrouter/auto`)
+  - `tad.openaiApiKey`, `tad.openrouterApiKey`
 - Or run commands:
-  - `Superdesign: Configure OpenAI API Key`
-  - `Superdesign: Configure OpenRouter API Key`
+  - `tad: Configure OpenAI API Key`
+  - `tad: Configure OpenRouter API Key`
 
 #### Workspace Artifacts
-- Generated assets live in `.superdesign/` at your workspace root:
+- Generated assets live in `.tad/` at your workspace root:
   - `design_iterations/` for HTML/SVG/CSS outputs
   - `moodboard/` for uploaded images
   - `dist/` for compiled pages/components (produced by your app/site builder)
@@ -68,9 +68,9 @@ The `test` script invokes `vscode-test` runner setup.
 #### Build Manifest (for Canvas → Template Mapping)
 If you want the Canvas to show which Page/Component/Element templates a compiled page uses and allow opening them, have your site/app builder emit a manifest at:
 
-`.superdesign/dist/manifest.json`
+`.tad/dist/manifest.json`
 
-Schema (per compiled file path relative to `.superdesign/dist/`):
+Schema (per compiled file path relative to `.tad/dist/`):
 
 ```json
 {
@@ -99,9 +99,9 @@ Notes:
 #### Canvas Metadata (for Tags and Collections)
 To organize compiled outputs into logical collections on the Canvas, emit a metadata file at:
 
-`.superdesign/dist/canvas-metadata.json`
+`.tad/dist/canvas-metadata.json`
 
-Schema (per compiled file path relative to `.superdesign/dist/`):
+Schema (per compiled file path relative to `.tad/dist/`):
 
 ```json
 {

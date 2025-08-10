@@ -127,14 +127,14 @@ export class ChatMessageService {
             Logger.error(`Processing error message: "${errorMessage}"`);
             if (this.agentService.isApiKeyAuthError(errorMessage) || !this.agentService.hasApiKey()) {
                 // Determine which provider is currently selected to show specific error
-                const config = vscode.workspace.getConfiguration('superdesign');
+                const config = vscode.workspace.getConfiguration('tad');
                 const specificModel = config.get<string>('aiModel');
                 const provider = config.get<string>('aiModelProvider', 'anthropic');
                 
                 // Determine provider from model name if specific model is set
                 let effectiveProvider = provider;
                 let providerName = 'AI';
-                let configureCommand = 'superdesign.configureApiKey';
+                let configureCommand = 'tad.configureApiKey';
                 
                 if (specificModel) {
                     if (specificModel.includes('/')) {
@@ -149,15 +149,15 @@ export class ChatMessageService {
                 switch (effectiveProvider) {
                     case 'openrouter':
                         providerName = 'OpenRouter';
-                        configureCommand = 'superdesign.configureOpenRouterApiKey';
+                        configureCommand = 'tad.configureOpenRouterApiKey';
                         break;
                     case 'anthropic':
                         providerName = 'Anthropic';
-                        configureCommand = 'superdesign.configureApiKey';
+                        configureCommand = 'tad.configureApiKey';
                         break;
                     case 'openai':
                         providerName = 'OpenAI';
-                        configureCommand = 'superdesign.configureOpenAIApiKey';
+                        configureCommand = 'tad.configureOpenAIApiKey';
                         break;
                 }
                 
@@ -171,7 +171,7 @@ export class ChatMessageService {
                     error: displayMessage,
                     actions: [
                         { text: `Configure ${providerName} API Key`, command: configureCommand },
-                        { text: 'Open Settings', command: 'workbench.action.openSettings', args: '@ext:iganbold.superdesign' }
+                        { text: 'Open Settings', command: 'workbench.action.openSettings', args: '@ext:iganbold.tad' }
                     ]
                 });
             } else {

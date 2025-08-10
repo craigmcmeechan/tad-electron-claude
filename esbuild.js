@@ -95,10 +95,10 @@ async function main() {
 			console.log('Assets directory not found at:', assetsSrcPath);
 		}
 
-        // If a workspace-level builder exists under .superdesign/builder,
+        // If a workspace-level builder exists under .tad/builder,
         // copy its key files into src/assets/builder so that packaging bundles it.
         try {
-            const workspaceBuilderDir = path.join(__dirname, '.superdesign', 'builder');
+            const workspaceBuilderDir = path.join(__dirname, '.tad', 'builder');
             const srcAssetsBuilderDir = path.join(__dirname, 'src', 'assets', 'builder');
             const wsBuildJs = path.join(workspaceBuilderDir, 'build.js');
             const wsPkgJson = path.join(workspaceBuilderDir, 'package.json');
@@ -107,11 +107,11 @@ async function main() {
                 fs.mkdirSync(srcAssetsBuilderDir, { recursive: true });
                 if (fs.existsSync(wsBuildJs)) {
                     fs.cpSync(wsBuildJs, path.join(srcAssetsBuilderDir, 'build.js'));
-                    console.log('Synced builder: .superdesign/builder/build.js -> src/assets/builder/build.js');
+                    console.log('Synced builder: .tad/builder/build.js -> src/assets/builder/build.js');
                 }
                 if (fs.existsSync(wsPkgJson)) {
                     fs.cpSync(wsPkgJson, path.join(srcAssetsBuilderDir, 'package.json'));
-                    console.log('Synced builder: .superdesign/builder/package.json -> src/assets/builder/package.json');
+                    console.log('Synced builder: .tad/builder/package.json -> src/assets/builder/package.json');
                 }
             }
         } catch (e) {

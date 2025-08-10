@@ -1,6 +1,6 @@
 ---
 description: Nunjucks-compatible template annotations for directional page-to-page relationships
-globs: .superdesign/templates/pages/**/*.njk
+globs: .tad/templates/pages/**/*.njk
 alwaysApply: true
 ---
 
@@ -19,7 +19,7 @@ alwaysApply: true
 Notes:
 - Use arrays for multiple targets. Single strings are also allowed; prefer arrays for consistency.
 - Targets can be given as:
-  - Workspace-relative paths (recommended), e.g. `.superdesign/templates/pages/2.studyview.0.home.njk`
+  - Workspace-relative paths (recommended), e.g. `.tad/templates/pages/2.studyview.0.home.njk`
   - Template-root-relative paths, e.g. `pages/2.studyview.0.home.njk`
   - Paths without extension; resolution will try configured default extensions.
 
@@ -47,7 +47,7 @@ Both forms are supported. Prefer the YAML block for readability and tooling.
 
 ### Examples from this codebase
 
-Add relationships to the Home Dashboard page [1.home_dashboard.njk](mdc:.superdesign/templates/pages/1.home_dashboard.njk):
+Add relationships to the Home Dashboard page [1.home_dashboard.njk](mdc:.tad/templates/pages/1.home_dashboard.njk):
 
 ```nunjucks
 {#
@@ -65,7 +65,7 @@ Or a compact form:
 {# @rel next: pages/2.studyview.0.home.njk #}
 ```
 
-Annotate the Study View home page [2.studyview.0.home.njk](mdc:.superdesign/templates/pages/2.studyview.0.home.njk):
+Annotate the Study View home page [2.studyview.0.home.njk](mdc:.tad/templates/pages/2.studyview.0.home.njk):
 
 ```nunjucks
 {#
@@ -113,7 +113,7 @@ relationships:
 ```
 
 ### Resolution rules
-- Paths are resolved relative to configured template roots (`superdesign.nunjucks.templateRoots`) and default extensions (`superdesign.nunjucks.defaultExtensions`).
+- Paths are resolved relative to configured template roots (`tad.nunjucks.templateRoots`) and default extensions (`tad.nunjucks.defaultExtensions`).
 - If an extension is omitted, resolution will try the configured extensions in order.
 - Unresolved targets should surface as diagnostics in tooling that implements this rule.
 

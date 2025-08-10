@@ -13,6 +13,7 @@ interface DesignFrameProps {
     onSelect: (fileName: string) => void;
     renderMode?: 'placeholder' | 'iframe' | 'html';
     showMetadata?: boolean;
+    showActionMenu?: boolean;
     viewport?: ViewportMode;
     viewportDimensions?: FrameDimensions;
     onViewportChange?: (fileName: string, viewport: ViewportMode) => void;
@@ -36,6 +37,7 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
     onSelect,
     renderMode = 'placeholder',
     showMetadata = true,
+    showActionMenu = false,
     viewport = 'desktop',
     viewportDimensions,
     onViewportChange,
@@ -54,6 +56,23 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
     const [showCopyDropdown, setShowCopyDropdown] = React.useState(false);
     const [copyButtonState, setCopyButtonState] = React.useState<{ text: string; isSuccess: boolean }>({ text: 'Copy prompt', isSuccess: false });
     const [copyPathButtonState, setCopyPathButtonState] = React.useState<{ text: string; isSuccess: boolean }>({ text: 'Copy design path', isSuccess: false });
+
+    // Determine the primary template path for this frame (page or main component)
+    const primaryTemplatePath = React.useMemo(() => {
+        const pagePath = file.templates?.page?.path;
+        const mainComponentPath = (file.templates?.components && file.templates.components.length > 0)
+            ? file.templates.components[0]?.path
+            : undefined;
+        return pagePath || mainComponentPath || undefined;
+    }, [file.templates]);
+
+    const handleTitleClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (primaryTemplatePath && vscode) {
+            vscode.postMessage({ command: 'openTemplateFile', data: { filePath: primaryTemplatePath } });
+        }
+    };
 
     const handleClick = () => {
         onSelect(file.name);
@@ -470,7 +489,14 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
             onMouseDown={handleMouseDown}
         >
             <div className="frame-header">
-                <span className="frame-title">{file.name}</span>
+                <span
+                    className="frame-title"
+                    onClick={primaryTemplatePath ? handleTitleClick : undefined}
+                    title={primaryTemplatePath ? `Open template: ${primaryTemplatePath}` : undefined}
+                    style={primaryTemplatePath ? { cursor: 'pointer' } : undefined}
+                >
+                    {file.name}
+                </span>
                 <button
                     className="frame-refresh-btn"
                     title="Refresh from source"
@@ -670,8 +696,8 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                 
             </div>
             
-            {/* Floating Action Buttons - Outside frame, top-right corner */}
-            {isSelected && !isDragging && (
+            {/* Floating Action Buttons - gated behind showActionMenu to hide previous options while keeping functionality */}
+            {showActionMenu && isSelected && !isDragging && (
                 <div 
                     className="floating-action-buttons"
                     onClick={(e) => e.stopPropagation()}
