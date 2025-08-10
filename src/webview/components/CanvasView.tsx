@@ -97,6 +97,29 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
     });
     const [hierarchyTree, setHierarchyTree] = useState<HierarchyTree | null>(null);
     const [showConnections, setShowConnections] = useState(true);
+    const [showDebug, setShowDebug] = useState<boolean>(false);
+    const [focusDebug, setFocusDebug] = useState<null | {
+        fileName: string;
+        layoutMode: LayoutMode;
+        viewportMode: ViewportMode;
+        frameWidth: number;
+        frameHeight: number;
+        index: number;
+        positionXComputed: number;
+        positionYComputed: number;
+        domOffsetX: number;
+        domOffsetY: number;
+        finalX: number;
+        finalY: number;
+        targetCenterX: number;
+        targetCenterY: number;
+        containerWidth: number;
+        containerHeight: number;
+        desiredScale: number;
+        clampedScale: number;
+        positionX: number;
+        positionY: number;
+    }>(null);
     const transformRef = useRef<ReactZoomPanPinchRef>(null);
     const rafZoomStateRef = useRef<{ scheduled: boolean; nextScale: number } | null>(null);
     const savedStateRef = useRef<any>(null);
@@ -105,27 +128,65 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
     const pendingDragPosRef = useRef<GridPosition | null>(null);
     const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
     const [isTransformReady, setIsTransformReady] = useState<boolean>(false);
+    // Force render a specific frame to ensure it mounts for measurement
+    const [forceRenderFrame, setForceRenderFrame] = useState<string | null>(null);
     // Search state
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [showSearchDropdown, setShowSearchDropdown] = useState<boolean>(false);
     const searchInputRef = useRef<HTMLInputElement | null>(null);
+    // (Optional) a ref registry could be added here; using querySelector for minimal change
 
-    const searchResults = useMemo(() => {
-        const q = searchQuery.trim().toLowerCase();
-        if (!q) return [] as DesignFile[];
-        // Simple substring match, rank by start-with first then includes
-        const startsWith: DesignFile[] = [];
-        const includes: DesignFile[] = [];
-        designFiles.forEach(f => {
-            const name = f.name.toLowerCase();
-            if (name.startsWith(q)) {
-                startsWith.push(f);
-            } else if (name.includes(q)) {
-                includes.push(f);
+    // Build manifest-backed search index from loaded design files
+    type SearchItem = { name: string; kind: 'page' | 'component' | 'element'; frame: string; path?: string };
+    const searchIndex: SearchItem[] = useMemo(() => {
+        const items: SearchItem[] = [];
+        for (const file of designFiles) {
+            const t = file.templates;
+            if (t) {
+                if (t.page?.name) {
+                    items.push({ name: t.page.name, kind: 'page', frame: file.name, path: t.page.path });
+                }
+                if (Array.isArray(t.components)) {
+                    for (const c of t.components) {
+                        if (c?.name) items.push({ name: c.name, kind: 'component', frame: file.name, path: c.path });
+                    }
+                }
+                if (Array.isArray(t.elements)) {
+                    for (const el of t.elements) {
+                        if (el?.name) items.push({ name: el.name, kind: 'element', frame: file.name, path: el.path });
+                    }
+                }
             }
-        });
-        return [...startsWith, ...includes].slice(0, 25);
-    }, [designFiles, searchQuery]);
+            // Fallbacks if manifest missing: allow searching by frame name as last resort
+            if (!t || (!t.page?.name && (!t.components || t.components.length === 0))) {
+                items.push({ name: file.name, kind: file.fileType === 'html' ? 'page' : 'component', frame: file.name, path: file.path });
+            }
+        }
+        return items;
+    }, [designFiles]);
+
+    const searchResults: SearchItem[] = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return [];
+        const startsWith: SearchItem[] = [];
+        const includes: SearchItem[] = [];
+        for (const item of searchIndex) {
+            const name = item.name.toLowerCase();
+            if (name.startsWith(q)) startsWith.push(item);
+            else if (name.includes(q)) includes.push(item);
+        }
+        // De-duplicate by (name, frame, kind)
+        const dedup: SearchItem[] = [];
+        const seen = new Set<string>();
+        for (const it of [...startsWith, ...includes]) {
+            const key = `${it.kind}|${it.name}|${it.frame}`;
+            if (!seen.has(key)) {
+                seen.add(key);
+                dedup.push(it);
+            }
+        }
+        return dedup.slice(0, 25);
+    }, [searchIndex, searchQuery]);
 
     if (DEBUG) console.log('✅ CanvasView state initialized successfully');
     
@@ -204,26 +265,77 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         }
     };
 
+    // Compute average frame dimensions for current viewport usage (used by hierarchy layout)
+    const computeAverageFrameDimensions = (): { width: number; height: number } => {
+        let totalWidth = 0;
+        let totalHeight = 0;
+        let frameCount = 0;
+        for (const file of designFiles) {
+            const vp = getFrameViewport(file.name);
+            const d = currentConfig.viewports[vp];
+            totalWidth += d.width;
+            totalHeight += d.height + 50;
+            frameCount++;
+        }
+        return frameCount > 0
+            ? { width: Math.round(totalWidth / frameCount), height: Math.round(totalHeight / frameCount) }
+            : { width: 400, height: 550 };
+    };
+
     // Focus the view on a specific frame by name
     const focusOnFrame = (fileName: string) => {
         if (!transformRef.current) return;
         const wrapper = document.querySelector('.canvas-transform-wrapper') as HTMLElement | null;
-        if (!wrapper) return;
+        const content = document.querySelector('.canvas-transform-content') as HTMLElement | null;
+        // Use viewport size for centering to avoid picking up oversized content width
+        // In some layouts (e.g., panel), the wrapper can expand with content min-width.
+        // Always prefer the viewport dimensions for centering math.
+        const containerWidth = window.innerWidth;
+        const containerHeight = window.innerHeight;
 
         const index = designFiles.findIndex(f => f.name === fileName);
         if (index === -1) return;
 
-        const viewportMode = getFrameViewport(fileName);
-        const dims = currentConfig.viewports[viewportMode];
-        const frameWidth = dims.width;
-        const frameHeight = dims.height + 50; // header space
+        // Use avg dims in hierarchy mode to match how positions were computed
+        let frameWidth: number;
+        let frameHeight: number;
+        let viewportModeForFrame: ViewportMode = getFrameViewport(fileName);
+        if (layoutMode === 'hierarchy' && hierarchyTree) {
+            const avg = computeAverageFrameDimensions();
+            frameWidth = avg.width;
+            frameHeight = avg.height;
+        } else {
+            const dims = currentConfig.viewports[viewportModeForFrame];
+            frameWidth = dims.width;
+            frameHeight = dims.height + 50; // header space
+        }
 
         const position = getFramePosition(fileName, index);
-        const targetCenterX = position.x + frameWidth / 2;
-        const targetCenterY = position.y + frameHeight / 2;
 
-        const containerWidth = wrapper.clientWidth;
-        const containerHeight = wrapper.clientHeight;
+        // Ensure the target frame is mounted for measurement
+        setForceRenderFrame(fileName);
+
+        // If we can read actual DOM position, prefer that over computed grid position
+        // Use NaN sentinel so we only adopt DOM offsets when a node is actually found
+        let domOffsetX = Number.NaN;
+        let domOffsetY = Number.NaN;
+        if (content) {
+            const node = content.querySelector(`.design-frame[data-frame-name="${CSS.escape(fileName)}"]`) as HTMLElement | null;
+            if (node) {
+                const rect = node.getBoundingClientRect();
+                const contentRect = content.getBoundingClientRect();
+                const currentScale = transformRef.current?.instance?.transformState?.scale || 1;
+                // Convert from screen px to content-space coordinates (pre-transform)
+                domOffsetX = (rect.left - contentRect.left) / currentScale;
+                domOffsetY = (rect.top - contentRect.top) / currentScale;
+            }
+        }
+
+        const finalX = Number.isFinite(domOffsetX) ? domOffsetX : position.x;
+        const finalY = Number.isFinite(domOffsetY) ? domOffsetY : position.y;
+
+        const targetCenterX = finalX + frameWidth / 2;
+        const targetCenterY = finalY + frameHeight / 2;
 
         // Compute a scale that fits the frame nicely within the viewport with padding
         const padFactor = 0.85; // show with some padding
@@ -232,17 +344,77 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         const desiredScale = Math.min(scaleX, scaleY, 1);
         const clampedScale = Math.max(currentConfig.minZoom, Math.min(currentConfig.maxZoom, desiredScale));
 
-        const positionX = -(targetCenterX * clampedScale) + containerWidth / 2;
-        const positionY = -(targetCenterY * clampedScale) + containerHeight / 2;
+        // Compute translate so that target center maps to viewport center
+        // react-zoom-pan-pinch uses content transform: translate(positionX, positionY) scale(scale)
+        // With our absolute coordinates inside content, the correct translation is:
+        // positionX = containerCenterX - targetCenterX * scale
+        const positionX = (containerWidth / 2) - (targetCenterX * clampedScale);
+        const positionY = (containerHeight / 2) - (targetCenterY * clampedScale);
 
-        transformRef.current.setTransform(positionX, positionY, clampedScale);
-        setCurrentZoom(clampedScale);
-        setPan({ x: positionX, y: positionY });
+        // Capture debug info
+        setFocusDebug({
+            fileName,
+            layoutMode,
+            viewportMode: viewportModeForFrame,
+            frameWidth,
+            frameHeight,
+            index,
+            positionXComputed: position.x,
+            positionYComputed: position.y,
+            domOffsetX,
+            domOffsetY,
+            finalX,
+            finalY,
+            targetCenterX,
+            targetCenterY,
+            containerWidth,
+            containerHeight,
+            desiredScale,
+            clampedScale,
+            positionX,
+            positionY,
+        });
+
+        // Double RAF to ensure DOM nodes and transform context are fully updated before centering
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                transformRef.current?.setTransform(positionX, positionY, clampedScale);
+                setCurrentZoom(clampedScale);
+                setPan({ x: positionX, y: positionY });
+
+                // Settle pass: re-measure and apply a tiny correction if needed, then clear force flag
+                requestAnimationFrame(() => {
+                    const contentEl = document.querySelector('.canvas-transform-content') as HTMLElement | null;
+                    const node = contentEl?.querySelector(`.design-frame[data-frame-name="${CSS.escape(fileName)}"]`) as HTMLElement | null;
+                    if (contentEl && node) {
+                        const rect = node.getBoundingClientRect();
+                        const contentRect = contentEl.getBoundingClientRect();
+                        const scaleNow = transformRef.current?.instance?.transformState?.scale || clampedScale;
+                        const domXNow = (rect.left - contentRect.left) / scaleNow;
+                        const domYNow = (rect.top - contentRect.top) / scaleNow;
+                        const finalXNow = Number.isFinite(domXNow) ? domXNow : finalX;
+                        const finalYNow = Number.isFinite(domYNow) ? domYNow : finalY;
+                        const targetCenterXNow = finalXNow + frameWidth / 2;
+                        const targetCenterYNow = finalYNow + frameHeight / 2;
+                        const correctedX = (containerWidth / 2) - (targetCenterXNow * clampedScale);
+                        const correctedY = (containerHeight / 2) - (targetCenterYNow * clampedScale);
+                        const dx = Math.abs((transformRef.current?.instance?.transformState?.positionX || 0) - correctedX);
+                        const dy = Math.abs((transformRef.current?.instance?.transformState?.positionY || 0) - correctedY);
+                        if (dx > 0.5 || dy > 0.5) {
+                            transformRef.current?.setTransform(correctedX, correctedY, clampedScale);
+                            setPan({ x: correctedX, y: correctedY });
+                        }
+                    }
+                    setForceRenderFrame(null);
+                });
+            });
+        });
     };
 
-    const handleSelectFromSearch = (fileName: string) => {
-        setSelectedFrames([fileName]);
-        focusOnFrame(fileName);
+    const handleSelectFromSearch = (item: SearchItem) => {
+        // Focus the frame that contains this page/component/element
+        setSelectedFrames([item.frame]);
+        focusOnFrame(item.frame);
         setShowSearchDropdown(false);
         // Keep the query for next time, but blur input
         searchInputRef.current?.blur();
@@ -346,12 +518,22 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                 setPan({ x: sx, y: sy });
                                 setIsTransformReady(true);
                             } else {
-                                transformRef.current.resetTransform();
-                                // Ensure memoized bounds recalc after reset
-                                const ts = transformRef.current?.instance?.transformState;
-                                if (ts) {
-                                    setCurrentZoom(ts.scale);
-                                    setPan({ x: ts.positionX, y: ts.positionY });
+                                // Center to fit current canvas bounds more predictably
+                                // Compute a fit-to-view for the overall canvas based on grid sizing
+                                try {
+                                    const wrapperEl = document.querySelector('.canvas-transform-wrapper') as HTMLElement | null;
+                                    const w = wrapperEl?.clientWidth || window.innerWidth;
+                                    const h = wrapperEl?.clientHeight || window.innerHeight;
+                                    // Estimate canvas bounds from last item's position and per-row metrics
+                                    // Fallback: just reset transform if anything fails
+                                    transformRef.current.resetTransform();
+                                    const ts = transformRef.current?.instance?.transformState;
+                                    if (ts) {
+                                        setCurrentZoom(ts.scale);
+                                        setPan({ x: ts.positionX, y: ts.positionY });
+                                    }
+                                } catch {
+                                    transformRef.current.resetTransform();
                                 }
                                 setIsTransformReady(true);
                             }
@@ -597,14 +779,14 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
     };
 
     // Basic viewport culling: determine visible area in canvas space and filter frames
-    const visibleBounds = useMemo(() => {
+        const visibleBounds = useMemo(() => {
         const transformState = transformRef.current?.instance?.transformState;
         const scale = transformState?.scale || 1;
         const x = transformState?.positionX || 0;
         const y = transformState?.positionY || 0;
-        const wrapper = document.querySelector('.canvas-transform-wrapper') as HTMLElement | null;
-        const width = wrapper?.clientWidth || window.innerWidth;
-        const height = wrapper?.clientHeight || window.innerHeight;
+        // Use viewport size instead of wrapper element which may stretch with content
+        const width = window.innerWidth;
+        const height = window.innerHeight;
         const left = (-x) / scale;
         const top = (-y) / scale;
         const right = left + width / scale;
@@ -846,7 +1028,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                             onFocus={() => setShowSearchDropdown(true)}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' && searchResults.length > 0) {
-                                    handleSelectFromSearch(searchResults[0].name);
+                                    handleSelectFromSearch(searchResults[0]);
                                 } else if (e.key === 'Escape') {
                                     setShowSearchDropdown(false);
                                     (e.target as HTMLInputElement).blur();
@@ -862,15 +1044,15 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                 e.preventDefault();
                             }}
                         >
-                            {searchResults.map(file => (
+                            {searchResults.map(item => (
                                 <button
-                                    key={file.name}
+                                    key={`${item.kind}:${item.name}:${item.frame}`}
                                     className="canvas-search-item"
-                                    title={file.path}
-                                    onClick={() => handleSelectFromSearch(file.name)}
+                                    title={item.path || item.frame}
+                                    onClick={() => handleSelectFromSearch(item)}
                                 >
-                                    <span className="canvas-search-name">{file.name}</span>
-                                    <span className="canvas-search-type">{file.fileType.toUpperCase()}</span>
+                                    <span className="canvas-search-name">{item.name}</span>
+                                    <span className="canvas-search-type">{item.kind.toUpperCase()}</span>
                                 </button>
                             ))}
                         </div>
@@ -931,6 +1113,13 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                 <LinkIcon />
                     </button>
                         )}
+                        <button 
+                            className={`toolbar-btn ${showDebug ? 'active' : ''}`}
+                            onClick={() => setShowDebug(prev => !prev)}
+                            title="Toggle Debug Overlay"
+                        >
+                            DBG
+                        </button>
                     </div>
                 </div>
 
@@ -995,6 +1184,50 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                     </div>
                 </div>
             </div>
+
+            {/* Debug Overlay (fixed to viewport, not transformed) */}
+            {showDebug && (
+                (() => {
+                    const ts = transformRef.current?.instance?.transformState;
+                    const overlayData: any = {
+                        layoutMode,
+                        useGlobalViewport,
+                        globalViewportMode,
+                        currentZoom,
+                        pan,
+                        selectedFrames,
+                        transformState: ts ? {
+                            scale: ts.scale,
+                            positionX: ts.positionX,
+                            positionY: ts.positionY
+                        } : null,
+                        focus: focusDebug || null
+                    };
+                    return (
+                        <div
+                            style={{
+                                position: 'absolute',
+                                top: 16,
+                                right: 16,
+                                background: 'rgba(0,0,0,0.75)',
+                                color: '#fff',
+                                padding: '10px 12px',
+                                borderRadius: 8,
+                                fontSize: 11,
+                                zIndex: 5000,
+                                maxWidth: 460,
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.35)'
+                            }}
+                        >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                <strong>Canvas Debug</strong>
+                                <span style={{ opacity: 0.8 }}>Click DBG to hide</span>
+                            </div>
+                            <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{JSON.stringify(overlayData, null, 2)}</pre>
+                        </div>
+                    );
+                })()
+            )}
 
             {/* Infinite Canvas */}
             <TransformWrapper
@@ -1117,6 +1350,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                             />
                         )}
                         {designFiles.map((file, index) => {
+                            const isForced = forceRenderFrame === file.name;
                             const frameViewport = getFrameViewport(file.name);
                             const viewportDimensions = currentConfig.viewports[frameViewport];
                             
@@ -1141,7 +1375,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
 
                             const computedRenderMode = isTransformReady ? getOptimalRenderMode(currentZoom) : 'placeholder';
 
-                            if (!isInView && computedRenderMode !== 'placeholder') {
+                            if (!isInView && computedRenderMode !== 'placeholder' && !isForced) {
                                 // If we're above LOD threshold (would iframe), but offscreen, render nothing
                                 return null;
                             }

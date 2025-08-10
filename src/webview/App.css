@@ -1084,7 +1084,7 @@
     font-size: 12px;
     min-height: 32px;
     max-width: calc(100vw - 32px);
-    overflow: hidden;
+    overflow: visible; /* allow dropdowns to extend beyond toolbar */
     transition: all 0.2s ease;
 }
 

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Nunjucks",
+  "scopeName": "text.html.nunjucks",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#expressions" },
+    { "include": "#statements" },
+    { "include": "text.html.basic" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.nunjucks",
+          "begin": "\{#",
+          "end": "#\}",
+          "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.nunjucks" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.comment.end.nunjucks" } }
+        }
+      ]
+    },
+    "expressions": {
+      "patterns": [
+        {
+          "name": "meta.output.nunjucks",
+          "begin": "\{\{\-?",
+          "end": "\-?\}\}",
+          "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.nunjucks" } },
+          "endCaptures": { "0": { "name": "punctuation.section.embedded.end.nunjucks" } },
+          "patterns": [
+            { "include": "#strings" },
+            { "include": "#keywords" },
+            { "include": "#numbers" }
+          ]
+        }
+      ]
+    },
+    "statements": {
+      "patterns": [
+        {
+          "name": "meta.statement.nunjucks",
+          "begin": "\{\%\-?",
+          "end": "\-?\%\}",
+          "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.nunjucks" } },
+          "endCaptures": { "0": { "name": "punctuation.section.embedded.end.nunjucks" } },
+          "patterns": [
+            { "include": "#strings" },
+            { "include": "#keywords" },
+            { "include": "#numbers" }
+          ]
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        { "name": "string.quoted.double.nunjucks", "begin": "\"", "end": "\"" },
+        { "name": "string.quoted.single.nunjucks", "begin": "'", "end": "'" }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        { "name": "constant.numeric.nunjucks", "match": "(?<![A-Za-z_])(0x[0-9A-Fa-f]+|[0-9]+(\\.[0-9]+)?)" }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        { "name": "keyword.control.nunjucks", "match": "\\b(if|else|elif|endif|for|endfor|block|endblock|extends|include|import|from|macro|endmacro|set|endset|filter|endfilter|raw|endraw)\\b" }
+      ]
+    }
+  }
+}
+
+
+
+
+
+
+
+
+

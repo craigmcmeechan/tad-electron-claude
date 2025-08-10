@@ -23,6 +23,7 @@ interface DesignFrameProps {
     onSendToChat?: (fileName: string, prompt: string) => void;
     onRefresh?: (filePath: string) => void;
     vscode?: any;
+    onMountRef?: (fileName: string, el: HTMLElement | null) => void;
 }
 
 const DEBUG = false;
@@ -45,6 +46,7 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
     onSendToChat
     , onRefresh
     , vscode
+    , onMountRef
 }) => {
     const [isLoading, setIsLoading] = React.useState(renderMode === 'iframe');
     const [hasError, setHasError] = React.useState(false);
@@ -455,6 +457,7 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
     return (
         <div
             className={`design-frame ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''}`}
+            data-frame-name={file.name}
             style={{
                 position: 'absolute',
                 left: `${position.x}px`,
@@ -465,6 +468,7 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                 zIndex: isDragging ? 1000 : (isSelected ? 10 : 1),
                 opacity: isDragging ? 0.8 : 1
             }}
+            ref={(el) => onMountRef?.(file.name, el)}
             onClick={handleClick}
             title={`${file.name} (${(file.size / 1024).toFixed(1)} KB)`}
             onMouseDown={handleMouseDown}

@@ -5,6 +5,8 @@ import { CustomAgentService } from './services/customAgentService';
 import { ChatSidebarProvider } from './providers/chatSidebarProvider';
 import { Logger, LogLevel } from './services/logger';
 import * as path from 'path';
+import { execa, execaNode } from 'execa';
+import { activateNunjucks } from './nunjucks/index';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -1304,6 +1306,14 @@ export function activate(context: vscode.ExtensionContext) {
 	const customAgent = new CustomAgentService(Logger.getOutputChannel());
 	Logger.info('CustomAgentService created');
 
+  // Activate Nunjucks language features
+  try {
+    activateNunjucks(context);
+    Logger.info('Nunjucks language features activated');
+  } catch (e) {
+    Logger.warn?.('Failed to activate Nunjucks language features: ' + (e instanceof Error ? e.message : String(e)));
+  }
+
 	// The command has been defined in the package.json file
 	// Now provide the implementation of the command with registerCommand
 	// The commandId parameter must match the command field in package.json
@@ -1374,6 +1384,102 @@ export function activate(context: vscode.ExtensionContext) {
 	// Register open settings command
 	const openSettingsDisposable = vscode.commands.registerCommand('superdesign.openSettings', () => {
 		vscode.commands.executeCommand('workbench.action.openSettings', '@ext:iganbold.superdesign');
+	});
+
+	// Register build templates command
+	const buildTemplatesDisposable = vscode.commands.registerCommand('superdesign.buildTemplates', async () => {
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+		if (!workspaceFolder) {
+			vscode.window.showErrorMessage('No workspace folder found. Please open a workspace first.');
+			return;
+		}
+
+		const builderDir = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'builder');
+		const buildJs = vscode.Uri.joinPath(builderDir, 'build.js');
+
+		try {
+			await vscode.workspace.fs.stat(buildJs);
+		} catch {
+			vscode.window.showErrorMessage(`Could not find .superdesign/builder/build.js at ${buildJs.fsPath}`);
+			return;
+		}
+
+		const output = Logger.getOutputChannel();
+		output.show(true);
+		Logger.info('Starting Superdesign template build...');
+
+		await vscode.window.withProgress({
+			title: 'Building Superdesign templates',
+			location: vscode.ProgressLocation.Notification,
+			cancellable: false
+		}, async () => {
+			const builderFsPath = builderDir.fsPath;
+
+			// Detect package manager based on lockfiles
+			const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+			const pnpmCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+			const yarnCmd = process.platform === 'win32' ? 'yarn.cmd' : 'yarn';
+
+			const hasFile = async (name: string) => {
+				try {
+					await vscode.workspace.fs.stat(vscode.Uri.joinPath(builderDir, name));
+					return true;
+				} catch { return false; }
+			};
+
+			const usePnpm = await hasFile('pnpm-lock.yaml');
+			const useYarn = !usePnpm && await hasFile('yarn.lock');
+			const hasPkgJson = await hasFile('package.json');
+
+			const run = async (cmd: string, args: string[]) => {
+				Logger.debug(`Running: ${cmd} ${args.join(' ')} (cwd=${builderFsPath})`);
+				const child = execa(cmd, args, { cwd: builderFsPath });
+				child.stdout?.on('data', (d: Buffer) => output.append(d.toString()))
+				child.stderr?.on('data', (d: Buffer) => output.append(d.toString()))
+				await child;
+			};
+
+			// Install dependencies if needed
+			if (hasPkgJson) {
+				const nodeModulesExists = await (async () => {
+					try { await vscode.workspace.fs.stat(vscode.Uri.joinPath(builderDir, 'node_modules')); return true; } catch { return false; }
+				})();
+				if (!nodeModulesExists) {
+					Logger.info('Installing builder dependencies...');
+					if (usePnpm) {
+						await run(pnpmCmd, ['install', '--frozen-lockfile']);
+					} else if (useYarn) {
+						await run(yarnCmd, ['install', '--frozen-lockfile']);
+					} else if (await hasFile('package-lock.json')) {
+						await run(npmCmd, ['ci']);
+					} else {
+						await run(npmCmd, ['install']);
+					}
+				}
+			}
+
+			// Prefer npm/pnpm/yarn script if exists, otherwise run node build.js
+			let ran = false;
+			if (hasPkgJson) {
+				try {
+					if (usePnpm) { await run(pnpmCmd, ['run', 'build']); ran = true; }
+					else if (useYarn) { await run(yarnCmd, ['build']); ran = true; }
+					else { await run(npmCmd, ['run', 'build', '--silent']); ran = true; }
+				} catch (e) {
+					Logger.warn('Package script "build" failed or missing. Falling back to "node build.js"');
+				}
+			}
+
+			if (!ran) {
+				Logger.info('Running builder via Node (current extension host)');
+				const child = execaNode('build.js', { cwd: builderFsPath });
+				child.stdout?.on('data', (d: Buffer) => output.append(d.toString()));
+				child.stderr?.on('data', (d: Buffer) => output.append(d.toString()));
+				await child;
+			}
+
+			Logger.info('✅ Superdesign templates built successfully.');
+		});
 	});
 
 	// Register command to open Template View in chat panel
@@ -1469,6 +1575,7 @@ export function activate(context: vscode.ExtensionContext) {
 		resetWelcomeDisposable,
 		initializeProjectDisposable,
 		openSettingsDisposable,
+		buildTemplatesDisposable,
 		openTemplateViewDisposable,
 		configureApiKeyQuickDisposable
 	);

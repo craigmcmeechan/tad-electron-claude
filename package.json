@@ -32,24 +32,50 @@
     "react",
     "html",
     "css",
-    
-    
     "generator",
     "automation"
   ],
   "activationEvents": [
     "onCommand:superdesign.helloWorld",
-    "onView:superdesign.chatView"
+    "onCommand:superdesign.buildTemplates",
+    "onView:superdesign.chatView",
+    "onLanguage:nunjucks"
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "languages": [
+      {
+        "id": "nunjucks",
+        "aliases": [
+          "Nunjucks",
+          "njk"
+        ],
+        "extensions": [
+          ".njk",
+          ".nunjucks"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nunjucks",
+        "scopeName": "text.html.nunjucks",
+        "path": "./syntaxes/nunjucks.tmLanguage.json"
+      }
+    ],
     "commands": [
       {
         "command": "superdesign.helloWorld",
         "title": "Hello World",
         "category": "Superdesign"
       },
-      
+      {
+        "command": "superdesign.buildTemplates",
+        "title": "Build Templates (Superdesign)",
+        "category": "Superdesign",
+        "icon": "$(run)"
+      },
       {
         "command": "superdesign.configureOpenAIApiKey",
         "title": "Configure OpenAI API Key",
@@ -102,6 +128,11 @@
           "group": "navigation"
         },
         {
+          "command": "superdesign.buildTemplates",
+          "when": "view == superdesign.chatView",
+          "group": "navigation@1"
+        },
+        {
           "command": "superdesign.openSettings",
           "when": "view == superdesign.chatView",
           "group": "navigation"
@@ -135,7 +166,6 @@
     "configuration": {
       "title": "Superdesign",
       "properties": {
-        
         "superdesign.openaiApiKey": {
           "type": "string",
           "description": "OpenAI API key for custom agent",
@@ -150,7 +180,6 @@
           "type": "string",
           "enum": [
             "openai",
-            
             "openrouter"
           ],
           "default": "openai",
@@ -161,6 +190,43 @@
           "type": "string",
           "description": "Specific AI model to use (e.g., gpt-4o, openrouter/auto)",
           "scope": "application"
+        },
+        "superdesign.nunjucks.templateRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".superdesign/templates",
+            "."
+          ],
+          "description": "Directories (workspace-relative) to search for Nunjucks templates (used for navigation, completion, diagnostics).",
+          "scope": "resource"
+        },
+        "superdesign.nunjucks.defaultExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".njk",
+            ".nunjucks",
+            ".html"
+          ],
+          "description": "File extensions to try when resolving templates without extension.",
+          "scope": "resource"
+        },
+        "superdesign.nunjucks.ignore": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules/**",
+            ".superdesign/dist/**"
+          ],
+          "description": "Glob patterns to ignore when indexing templates.",
+          "scope": "resource"
         }
       }
     }
@@ -187,6 +253,7 @@
     "test:tools": "tsc --project tsconfig.test.json && node dist-test/test/read-tool.test.js && node dist-test/test/write-edit-tools.test.js && node dist-test/test/ls-grep-glob-tools.test.js"
   },
   "devDependencies": {
+    "@types/micromatch": "^4.0.9",
     "@types/mime-types": "^3.0.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",

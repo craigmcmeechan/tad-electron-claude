@@ -1,0 +1,45 @@
+{
+  "comments": {
+    "lineComment": null,
+    "blockComment": ["{#", "#}"]
+  },
+  "brackets": [
+    ["{", "}"],
+    ["[", "]"],
+    ["(", ")"]
+  ],
+  "autoClosingPairs": [
+    { "open": "{#", "close": "#}", "notIn": ["string"] },
+    { "open": "{{", "close": "}}", "notIn": ["string", "comment"] },
+    { "open": "{%", "close": "%}", "notIn": ["string", "comment"] },
+    { "open": "[", "close": "]" },
+    { "open": "(", "close": ")" },
+    { "open": "\"", "close": "\"" },
+    { "open": "'", "close": "'" }
+  ],
+  "surroundingPairs": [
+    ["{#", "#}"],
+    ["{{", "}}"],
+    ["{%", "%}"],
+    ["[", "]"],
+    ["(", ")"],
+    ["\"", "\""],
+    ["'", "'"]
+  ],
+  "folding": {
+    "markers": {
+      "start": "^\s*\{%-?\s*(block|macro|if|for|raw)\b.*%\}",
+      "end": "^\s*\{%-?\s*end(block|macro|if|for|raw)\s*-?%\}"
+    }
+  },
+  "wordPattern": "(-?\\d*\\.\\d\\w*)|([^\u0000-\u007F]|[A-Za-z_]\\w*)"
+}
+
+
+
+
+
+
+
+
+
