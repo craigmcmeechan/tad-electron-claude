@@ -1,151 +1,136 @@
 ### Superdesign Architecture
 
 #### Overview
-Superdesign is a VS Code extension that embeds an AI-powered design/chat agent and a visual Canvas. It consists of:
-- Extension host (Node/TypeScript) that registers commands, hosts webviews, mediates tool calls, and integrates AI providers
-- React-based webviews for the sidebar Chat and the Canvas panel
-- A small toolbox of file/system utilities exposed to the AI agent
-- A local workspace directory, `.superdesign/`, for generated assets and design iterations
+Superdesign is a VS Code extension for building and navigating large Nunjucks-based template systems, with an integrated Canvas viewer and an optional AI-powered chat. The system comprises:
+- Extension host (TypeScript/Node) that registers VS Code contributions, activates Nunjucks language features, hosts webviews, syncs/builds a template builder, and brokers AI/tooling
+- React webviews for a sidebar Chat and a Canvas panel
+- A toolbox of safe file/system tools available to the AI agent
+- A workspace folder `.superdesign/` that holds design iterations, build outputs, prompts, and an optional builder
 
 #### Key Packages and Runtime
-- Language/runtime: TypeScript targeting Node 20+, ES2020
-- VS Code API: `@types/vscode` and runtime `vscode` (externalized from bundle)
-- Build: esbuild (custom `esbuild.js` for extension and webview)
-- UI: React 19 + ReactDOM, CSS bundled as text by esbuild
-- AI: `ai` SDK with providers `@ai-sdk/openai`, `@ai-sdk/anthropic`, `@openrouter/ai-sdk-provider`
+- Language/runtime: TypeScript (Node 20+), ES2020
+- VS Code API: `vscode` (externalized from the extension bundle)
+- Build: esbuild via `esbuild.js` (separate extension and webview builds)
+- UI: React 19 + ReactDOM; CSS inlined as text by esbuild
+- AI: `ai` SDK with providers `@ai-sdk/openai` and `@openrouter/ai-sdk-provider`
 
 ---
 
-### Extension Host (Backend)
+### Extension Host
 
 #### Entry and Activation
-- Entry: `dist/extension.js` (built from `src/extension.ts`)
-- Activation events (from `package.json`):
-  - `onCommand:superdesign.helloWorld`
+- Entry: `dist/extension.js` built from `src/extension.ts`
+- Activation events (`package.json`):
   - `onView:superdesign.chatView`
-- Contributions (selected):
-  - Commands: `superdesign.showChatSidebar`, `superdesign.openCanvas`, `superdesign.initializeProject`, API key configuration commands, etc.
-  - Views: webview view `superdesign.chatView` in activity bar container `superdesign-sidebar`
-  - Configuration: settings under `superdesign.*` (provider, model, API keys)
+  - `onCommand:superdesign.buildTemplates`, `onCommand:superdesign.syncBuilder`, `onCommand:superdesign.openCanvas`, etc.
+  - `onLanguage:nunjucks` (activates the Nunjucks features)
 
-#### Services
-- `CustomAgentService` (`src/services/customAgentService.ts`)
-  - Central AI integration using `ai` SDK and provider factories (OpenAI/Anthropic/OpenRouter)
-  - Streams assistant/tool messages to the webview
-  - Provides tool suite to the model: read, write, edit, multiedit, ls, grep, glob, bash, generateTheme
-  - Working directory: `.superdesign` (workspace root if available; OS temp folder otherwise)
-  - Model/provider selection:
-    - If `superdesign.aiModel` is set, infers provider from name (contains `/` → OpenRouter, else OpenAI)
-    - Otherwise uses provider default model (`gpt-4o` or `openrouter/auto`)
- 
-- `ChatMessageService` (`src/services/chatMessageService.ts`)
-  - Receives chat requests from webview, orchestrates streaming responses
-  - Converts streaming chunks and tool calls into webview-friendly messages
-  - Centralizes API key error handling with actionable fixes (open settings/commands)
-- `Logger` (`src/services/logger.ts`)
-  - Named output channel "Superdesign" with levels DEBUG/INFO/WARN/ERROR
+#### Nunjucks Language Features (`src/nunjucks/*`)
+- Config reader: `readConfig()` reads `superdesign.nunjucks.*` settings with sensible defaults
+- Indexer: `TemplateIndex` scans configured roots, tracks templates, and watches for changes
+- Resolver: `TemplateResolver` resolves include/import/extends targets across relative paths and roots with default extensions fallback
+- Providers:
+  - Definition: jump to targets in `{% include|import|extends %}`
+  - Completion: filename/path completion scoped to indexed templates
+  - Document symbols: block/macro symbols via lightweight regex parsing
+  - Diagnostics: unresolved include/import/extends surfaced as warnings
 
-#### Webview Providers and Panels
-- `ChatSidebarProvider` (`src/providers/chatSidebarProvider.ts`)
-  - Hosts the sidebar chat webview, sets initial HTML via `generateWebviewHtml`
-  - Bridges messages between webview and `ChatMessageService`/extension commands
-  - Handles provider/model selection via VS Code configuration
-- `SuperdesignCanvasPanel` (class in `src/extension.ts`)
-  - A standalone panel that renders the Canvas view (also React) via `dist/webview.js`
-  - Watches `.superdesign/design_iterations/**/*.{html,svg,css}` and notifies the webview on create/change/delete
-  - Inlines relative CSS `<link>` tags into HTML for preview fidelity inside the webview
+Key files:
+- `src/nunjucks/index.ts` activates providers and revalidates on config changes
+- `src/nunjucks/indexer.ts`, `src/nunjucks/resolver.ts`, `src/nunjucks/providers/*`, `src/nunjucks/parsers.ts`
 
-#### Commands (selected)
-- API key configuration: `superdesign.configureApiKey` (Anthropic), `superdesign.configureOpenAIApiKey`, `superdesign.configureOpenRouterApiKey`
-- `superdesign.showChatSidebar` to reveal the sidebar
-- `superdesign.openCanvas` to show the Canvas panel
-- `superdesign.initializeProject` to scaffold `.superdesign/`, baseline CSS, and authoring rules for popular IDE agents
-- `superdesign.clearChat` and `superdesign.resetWelcome` for UX controls
+#### Canvas, Builder, and Workspace
+- Canvas panel: `SuperdesignCanvasPanel` (in `src/extension.ts`)
+  - Renders `dist/webview.js` with a strict CSP nonce
+  - Watches `.superdesign/design_iterations/**/*.{html,svg,css}` and `.superdesign/dist/**/*.{html,svg,css}` and posts deltas to the webview
+  - Inlines local CSS `<link>` tags into HTML during preview for fidelity
+  - Supports optional spaces via `.superdesign/spaces.json` to switch among multiple build outputs
+  - Reads optional `.superdesign/dist/manifest.json` to map outputs back to source templates/components and lift relationships/tags into the Canvas model
+  - Reads optional `.superdesign/dist/canvas-metadata.json` for per-output tags
 
-#### Local Project Scaffolding
-- `initializeSuperdesignProject()` creates:
-  - `.superdesign/design_iterations/`
-  - A default CSS theme `default_ui_darkmode.css`
-  - AI authoring rules in `.cursor/rules/design.mdc`, `CLAUDE.md`, `.windsurfrules`
+- Builder integration:
+  - `superdesign.syncBuilder`: copies a packaged builder (from extension assets) into `.superdesign/builder`
+  - `superdesign.buildTemplates`: ensures a builder exists, installs deps if needed, then runs via pnpm/yarn/npm, or `node build.js`, and refreshes Canvas
+  - Output shape expected under `.superdesign/dist/{pages|components}/**/*.html` plus optional manifest/metadata described above
 
----
+- Project initialization: `superdesign.initializeProject` scaffolds `.superdesign/design_iterations/` and seeds authoring rules and a default theme CSS
 
-### Tools Exposed to the Agent (`src/tools/*`)
-- `read-tool`, `write-tool`, `edit-tool`, `multiedit-tool`: file I/O and editing primitives with guardrails
-- `glob-tool`, `grep-tool`, `ls-tool`: discovery and content search
-- `bash-tool`: executes shell commands with timeouts, unsafe-command checks, and Windows-aware shell selection (`cmd.exe /c`)
-- `theme-tool`: writes CSS themes to disk for preview/use
-- All tools validate workspace paths and return structured results suitable for streaming to the chat UI
+#### Chat and Agent
+- `ChatSidebarProvider` hosts the sidebar Chat, bridges messages to `ChatMessageService`, and supports provider/model selection based on configuration
+- `CustomAgentService` integrates the `ai` SDK and exposes safe tools:
+  - File I/O: read, write, edit, multiedit
+  - Discovery: ls, grep, glob
+  - Shell: bash (with guardrails)
+  - Theme generation: writes CSS themes
+  - Working directory defaults to `.superdesign/` in the current workspace
+- `ChatMessageService` streams assistant text, tool calls (with deltas), and tool results back to the webview using CoreMessage-like payloads
+
+Related files: `src/services/customAgentService.ts`, `src/services/chatMessageService.ts`, `src/providers/chatSidebarProvider.ts`, `src/services/logger.ts`
 
 ---
 
 ### Webviews (Frontend)
 
-#### Build Outputs
-- Single JS bundle for webview: `dist/webview.js` (ESM, JSX automatic)
-- Assets from `src/assets` are referenced via `webview.asWebviewUri`
+#### Bundles and Entrypoints
+- Webview bundle: `dist/webview.js` built from `src/webview/index.tsx`
+- Entrypoint chooses Chat vs Canvas by `data-view` attribute
+- React application `src/webview/App.tsx`; Chat UI in `src/webview/components/Chat/*`; Canvas UI in `src/webview/components/CanvasView.tsx`
 
-#### Sidebar Chat
-- HTML template: `src/templates/webviewTemplate.ts`
-  - Injects `window.__WEBVIEW_CONTEXT__` (layout, extension URIs, logo URIs)
-  - CSP: restricts default-src, allows inline style and images from webview origin; currently allows `'unsafe-inline'` script in chat view
-- React entry: `src/webview/index.tsx`
-  - Renders `ChatInterface` for sidebar, `App` for panel when appropriate
-- App and components: `src/webview/App.tsx`, `src/webview/components/*`
-  - `ChatInterface` handles:
-    - Conversation UI with streaming assistant and tool messages
-    - Model selection (delegated to extension via `postMessage`)
-    - Drag-and-drop and paste of images → saved by extension into `.superdesign/moodboard/` and then referenced or converted to base64 for vision models
-    - Welcome flow and Canvas auto-open handshakes (`checkCanvasStatus`/`autoOpenCanvas`)
+#### Chat View
+- Renders rich streaming responses, tool-call progress, and tool results
+- Persists history (localStorage) and supports image uploads/paste → saved to `.superdesign/moodboard/` via extension
+- Provides a lightweight Template panel to read `.superdesign/**/prompts*.md`
 
 #### Canvas Panel
-- Created from `src/extension.ts` (class `SuperdesignCanvasPanel`)
-- HTML is directly constructed with a nonce and loads `dist/webview.js`
-- Provides `window.__WEBVIEW_CONTEXT__` with logo URIs for in-webview rendering
-- Receives file watcher events to update the gallery of design outputs
+- Shows design iterations and built outputs
+- Displays tags and relationships (from manifest/metadata) and supports opening source templates/files
 
 ---
 
-### Build System (`esbuild.js`)
-- Produces two contexts:
-  - Extension bundle: CJS, `src/extension.ts` → `dist/extension.js`, externalizes `vscode`
-  - Webview bundle: ESM, `src/webview/index.tsx` → `dist/webview.js`, loaders for `.css/.png/.jpg/.svg`
-- `--watch` mode builds both contexts and logs problem-matcher friendly output
-- Post-build steps:
- 
-  - Copies `src/assets` into `dist/src/assets`
+### Build System
+- `esbuild.js` builds two outputs:
+  - Extension: CJS, `src/extension.ts` → `dist/extension.js`, externalizes `vscode`
+  - Webview: ESM, `src/webview/index.tsx` → `dist/webview.js`, with loaders for `.css/.png/.jpg/.svg`
+- Copies `src/assets` → `dist/src/assets`
+- In production, minifies and disables source content embedding
 
 ---
 
-### Configuration and State
-- VS Code Settings (`superdesign.*`):
-  - `aiModelProvider`: `openai` | `anthropic` | `openrouter` (default `anthropic`)
-  - `aiModel`: model ID (e.g., `gpt-4o`, `openrouter/auto`)
-  - `anthropicApiKey`, `openaiApiKey`, `openrouterApiKey`: currently stored in VS Code settings scope
-- Working directory: `.superdesign/` in the active workspace (fallback to temp dir)
-- Generated outputs: `.superdesign/design_iterations/*.{html,svg,css}` and `.superdesign/moodboard/*` for images
+### Configuration
+- Nunjucks (`resource` scoped):
+  - `superdesign.nunjucks.templateRoots`: defaults to `[".superdesign/templates", "."]`
+  - `superdesign.nunjucks.defaultExtensions`: defaults to `[".njk", ".nunjucks", ".html"]`
+  - `superdesign.nunjucks.ignore`: defaults to `["**/node_modules/**", ".superdesign/dist/**"]`
+- AI (`application` scoped):
+  - `superdesign.aiModelProvider`: `openai` | `openrouter` (default `openai`)
+  - `superdesign.aiModel`: e.g. `gpt-4o`, `openrouter/auto` (model name infers provider when set)
+  - API keys: `superdesign.openaiApiKey`, `superdesign.openrouterApiKey`
+
+Workspace conventions:
+- Working dir: `.superdesign/`
+- Design drafts: `.superdesign/design_iterations/**/*`
+- Build outputs: `.superdesign/dist/{pages,components}/**/*`
+- Optional: `.superdesign/dist/manifest.json`, `.superdesign/dist/canvas-metadata.json`, `.superdesign/spaces.json`
 
 ---
 
-### Data Flow (Typical Chat Round Trip)
-- Webview posts `chatMessage` with conversation or prompt → `ChatMessageService`
-- `CustomAgentService.query` calls `ai` SDK with tools and system prompt → streams chunks
-- For assistant text chunks: forwarded to webview as `chatResponseChunk`
-- For tool calls: forwarded as `tool-call` with streaming updates; tool executes; tool results forwarded as `tool-result`
-- On finish: `chatStreamEnd` sent to webview
+### Core Flows
+- Nunjucks navigation: editor position in `{% include|import|extends %}` → parse → resolve via roots+extensions → open target; unresolved targets emit diagnostics
+- Build & preview: run "Build Templates (Superdesign)" → ensure/copy builder → install deps if missing → run build → Canvas watches outputs and renders; CSS is inlined for local links
+- Chat tool streaming: Chat sends `CoreMessage[]` → AI SDK streams text/tool-call deltas → tools execute in `.superdesign/` → results stream to UI with progress and structured payloads
 
 ---
 
-### Security and Privacy Notes (as-implemented)
-- API keys are stored in VS Code settings, not in secret storage (recommendation: migrate to `vscode.SecretStorage`)
-- CSP for chat webview allows `'unsafe-inline'` scripts; Canvas uses a nonce. Recommend using nonce in both and removing `'unsafe-inline'`
-- A Supabase anon key and Helicone proxy keys are currently hardcoded in source (see quality-review.md)
-- Uploaded images are written to the workspace under `.superdesign/moodboard/` after size checks; extensions infer MIME by filename and content type for base64 conversion
+### Security Notes (current state)
+- API keys are stored in VS Code settings, not SecretStorage
+- Chat webview previously allowed `'unsafe-inline'` in CSP; Canvas uses a nonce. Prefer nonced scripts for both
+- Hardcoded keys exist for Supabase and Helicone routing in the codebase; these should be externalized
+- Image uploads are saved under `.superdesign/moodboard/` after size/type checks; base64 conversion happens in the extension for vision prompts
 
 ---
 
-### Notable Dependencies and Versions
-- React 19 (`react`, `react-dom`), `highlight.js`, `react-markdown`, `rehype-highlight`, `remark-gfm`, `lucide-react`
-- `ai` SDK 4.x with provider factories
-- Tooling: `esbuild` 0.25, ESLint 9.x with `@typescript-eslint`
-- TypeScript 5.8, Node types 20.x
+### Notable Dependencies
+- Runtime: TypeScript 5.8, Node types 20.x
+- Frontend: React 19, `react-markdown`, `rehype-highlight`, `remark-gfm`, `highlight.js`, `lucide-react`
+- Build: `esbuild` 0.25
+- AI: `ai` SDK 4.x, `@ai-sdk/openai`, `@openrouter/ai-sdk-provider`

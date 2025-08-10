@@ -99,6 +99,9 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         }
     });
     const [hierarchyTree, setHierarchyTree] = useState<HierarchyTree | null>(null);
+    const [spaces, setSpaces] = useState<Array<{ name: string; distDir: string }>>([]);
+    const [selectedSpace, setSelectedSpace] = useState<string | null>(null);
+    const [defaultSpace, setDefaultSpace] = useState<string | undefined>(undefined);
     const [showConnections, setShowConnections] = useState(true);
     const [showDebug, setShowDebug] = useState<boolean>(false);
     const [focusDebug, setFocusDebug] = useState<null | {
@@ -475,11 +478,15 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
             savedStateRef.current = {};
         }
 
+        // Ensure we receive spaces config even if posted before listener attaches
+        try { vscode.postMessage({ command: 'requestSpaces' } as any); } catch {}
+
         // Request design files from extension
         const loadMessage: any = {
             command: 'loadDesignFiles',
-            data: { source: 'dist', kind: distMode }
+            data: { source: 'dist', kind: distMode, space: selectedSpace || undefined }
         };
+        if (DEBUG) console.log('[Canvas] sending loadDesignFiles →', loadMessage);
         vscode.postMessage(loadMessage);
 
         // Listen for messages from extension and internal navigation requests
@@ -487,25 +494,22 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
             const message: ExtensionToWebviewMessage = event.data;
             
             switch (message.command) {
-                case 'designFilesLoaded':
+                case 'designFilesLoaded': {
+                    if (DEBUG) console.log('[Canvas] received designFilesLoaded. count=', (message as any)?.data?.files?.length);
                     // Convert date strings back to Date objects
                     const filesWithDates = message.data.files.map(file => ({
                         ...file,
                         modified: new Date(file.modified)
                     }));
-                    
                     // Detect design relationships and build hierarchy
                     const filesWithRelationships = detectDesignRelationships(filesWithDates);
                     setDesignFiles(filesWithRelationships);
-                    
                     // Build hierarchy tree
                     const tree = buildHierarchyTree(filesWithRelationships);
-                    
                     // Calculate average frame dimensions based on viewport usage
                     let totalWidth = 0;
                     let totalHeight = 0;
                     let frameCount = 0;
-                    
                     filesWithRelationships.forEach(file => {
                         const frameViewport = getFrameViewport(file.name);
                         const viewportDimensions = currentConfig.viewports[frameViewport];
@@ -513,17 +517,13 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                         totalHeight += viewportDimensions.height + 50; // Add header space
                         frameCount++;
                     });
-                    
                     const avgFrameDimensions = frameCount > 0 ? {
                         width: Math.round(totalWidth / frameCount),
                         height: Math.round(totalHeight / frameCount)
                     } : { width: 400, height: 550 };
-                    
                     const positionedTree = calculateHierarchyPositions(tree, currentConfig, avgFrameDimensions);
                     setHierarchyTree(positionedTree);
-                    
                     setIsLoading(false);
-
                     // Restore previous transform if available; otherwise center
                     setTimeout(() => {
                         if (transformRef.current) {
@@ -539,14 +539,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                 setPan({ x: sx, y: sy });
                                 setIsTransformReady(true);
                             } else {
-                                // Center to fit current canvas bounds more predictably
-                                // Compute a fit-to-view for the overall canvas based on grid sizing
                                 try {
-                                    const wrapperEl = document.querySelector('.canvas-transform-wrapper') as HTMLElement | null;
-                                    const w = wrapperEl?.clientWidth || window.innerWidth;
-                                    const h = wrapperEl?.clientHeight || window.innerHeight;
-                                    // Estimate canvas bounds from last item's position and per-row metrics
-                                    // Fallback: just reset transform if anything fails
                                     transformRef.current.resetTransform();
                                     const ts = transformRef.current?.instance?.transformState;
                                     if (ts) {
@@ -558,24 +551,54 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                 }
                                 setIsTransformReady(true);
                             }
-
                             if (savedPositions && typeof savedPositions === 'object') {
                                 setCustomPositions(savedPositions as FramePositionState);
                             }
                         }
                     }, 100);
                     break;
+                }
+                case 'spaces:init': {
+                    const data: any = (message as any).data || {};
+                    if (DEBUG) console.log('[Canvas] received spaces:init →', data);
+                    if (Array.isArray(data.spaces) && data.spaces.length > 0) {
+                        setSpaces(data.spaces);
+                        setDefaultSpace(typeof data.defaultSpace === 'string' ? data.defaultSpace : undefined);
+                        // initialize selected space from persisted state or default
+                        const saved = (vscode?.getState?.() || {}) as any;
+                        const persisted = typeof saved.canvasSpace === 'string' ? saved.canvasSpace : null;
+                        const initial = persisted && data.spaces.some((s: any) => s.name === persisted)
+                            ? persisted
+                            : (data.defaultSpace || data.spaces[0].name);
+                        setSelectedSpace(initial);
+                        try {
+                            const next = { ...(saved || {}), canvasSpace: initial };
+                            vscode?.setState?.(next);
+                        } catch {}
+                        // Trigger initial load for this space
+                        const msg = { command: 'loadDesignFiles', data: { source: 'dist', kind: distMode, space: initial } };
+                        if (DEBUG) console.log('[Canvas] sending loadDesignFiles (init) →', msg);
+                        vscode.postMessage(msg);
+                    } else {
+                        // No spaces configured; show a friendly error state in the toolbar area by leaving selector hidden
+                        try { console.warn('[Canvas] spaces:init received with no spaces configured'); } catch {}
+                    }
+                    break;
+                }
                     
                 case 'error':
+                    try { console.error('[Canvas] received error:', message?.data?.error); } catch {}
                     setError(message.data.error);
                     setIsLoading(false);
                     break;
 
                 case 'fileChanged':
                     // Handle file system changes (will implement in Task 2.3)
-                    if (DEBUG) console.log('File changed:', message.data);
+                    if (DEBUG) console.log('[Canvas] fileChanged:', message.data);
                     // Re-request files when changes occur
-                    vscode.postMessage({ command: 'loadDesignFiles', data: { source: 'dist', kind: distMode } });
+                    const msg = { command: 'loadDesignFiles', data: { source: 'dist', kind: distMode, space: selectedSpace || undefined } };
+                    if (DEBUG) console.log('[Canvas] sending loadDesignFiles (fileChanged) →', msg);
+                    vscode.postMessage(msg as any);
                     break;
 
                 case 'designFileRefreshed':
@@ -621,8 +644,8 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
             vscode?.setState?.(next);
         } catch {}
 
-        vscode.postMessage({ command: 'loadDesignFiles', data: { source: 'dist', kind: distMode } });
-    }, [distMode]);
+        vscode.postMessage({ command: 'loadDesignFiles', data: { source: 'dist', kind: distMode, space: selectedSpace || undefined } });
+    }, [distMode, selectedSpace]);
 
     const persistTransformState = (scale: number, x: number, y: number) => {
         // Schedule persistence to avoid spamming setState
@@ -1069,10 +1092,46 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
 
     if (isLoading) {
         return (
-            <div className="canvas-loading">
-                <div className="loading-spinner">
-                    <div className="spinner"></div>
-                    <p>Loading design files...</p>
+            <div className="canvas-container">
+                <div className="canvas-toolbar">
+                    <div className="toolbar-section">
+                        <div className="control-group">
+                            {(Array.isArray(spaces) && spaces.length > 0) && (
+                                <label className="space-selector-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <span>Space</span>
+                                    <select
+                                        className="canvas-space-selector"
+                                        value={selectedSpace || ''}
+                                        onChange={(e) => {
+                                            const value = e.target.value || null;
+                                            setSelectedSpace(value);
+                                            setIsLoading(true);
+                                            try {
+                                                const prev = savedStateRef.current || vscode?.getState?.() || {};
+                                                const next = { ...prev, canvasSpace: value };
+                                                savedStateRef.current = next;
+                                                vscode?.setState?.(next);
+                                            } catch {}
+                                            const msg = { command: 'loadDesignFiles', data: { source: 'dist', kind: distMode, space: value || undefined } };
+                                            try { console.log('[Canvas] space changed → sending loadDesignFiles', msg); } catch {}
+                                            vscode.postMessage(msg as any);
+                                        }}
+                                        title="Template Space"
+                                    >
+                                        {spaces.map(s => (
+                                            <option key={s.name} value={s.name}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                            )}
+                        </div>
+                    </div>
+                </div>
+                <div className="canvas-loading">
+                    <div className="loading-spinner">
+                        <div className="spinner"></div>
+                        <p>Loading design files...</p>
+                    </div>
                 </div>
             </div>
         );
@@ -1080,13 +1139,49 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
 
     if (error) {
         return (
-            <div className="canvas-error">
-                <div className="error-message">
-                    <h3>Error loading canvas</h3>
-                    <p>{error}</p>
-                    <button onClick={() => window.location.reload()}>
-                        Retry
-                    </button>
+            <div className="canvas-container">
+                <div className="canvas-toolbar">
+                    <div className="toolbar-section">
+                        <div className="control-group">
+                            {(Array.isArray(spaces) && spaces.length > 0) && (
+                                <label className="space-selector-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <span>Space</span>
+                                    <select
+                                        className="canvas-space-selector"
+                                        value={selectedSpace || ''}
+                                        onChange={(e) => {
+                                            const value = e.target.value || null;
+                                            setSelectedSpace(value);
+                                            setIsLoading(true);
+                                            try {
+                                                const prev = savedStateRef.current || vscode?.getState?.() || {};
+                                                const next = { ...prev, canvasSpace: value };
+                                                savedStateRef.current = next;
+                                                vscode?.setState?.(next);
+                                            } catch {}
+                                            const msg = { command: 'loadDesignFiles', data: { source: 'dist', kind: distMode, space: value || undefined } };
+                                            try { console.log('[Canvas] space changed → sending loadDesignFiles', msg); } catch {}
+                                            vscode.postMessage(msg as any);
+                                        }}
+                                        title="Template Space"
+                                    >
+                                        {spaces.map(s => (
+                                            <option key={s.name} value={s.name}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                            )}
+                        </div>
+                    </div>
+                </div>
+                <div className="canvas-error">
+                    <div className="error-message">
+                        <h3>Error loading canvas</h3>
+                        <p>{error}</p>
+                        <button onClick={() => window.location.reload()}>
+                            Retry
+                        </button>
+                    </div>
                 </div>
             </div>
         );
@@ -1094,10 +1189,46 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
 
     if (designFiles.length === 0) {
         return (
-            <div className="canvas-empty">
-                <div className="empty-state">
-                    <h3>No design files found in <code>.superdesign/design_iterations/</code></h3>
-                    <p>Prompt Superdesign or your preferred AI tool to design UI like <kbd>Help me design a calculator UI</kbd> and preview the UI here</p>
+            <div className="canvas-container">
+                <div className="canvas-toolbar">
+                    <div className="toolbar-section">
+                        <div className="control-group">
+                            {(Array.isArray(spaces) && spaces.length > 0) && (
+                                <label className="space-selector-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <span>Space</span>
+                                    <select
+                                        className="canvas-space-selector"
+                                        value={selectedSpace || ''}
+                                        onChange={(e) => {
+                                            const value = e.target.value || null;
+                                            setSelectedSpace(value);
+                                            setIsLoading(true);
+                                            try {
+                                                const prev = savedStateRef.current || vscode?.getState?.() || {};
+                                                const next = { ...prev, canvasSpace: value };
+                                                savedStateRef.current = next;
+                                                vscode?.setState?.(next);
+                                            } catch {}
+                                            const msg = { command: 'loadDesignFiles', data: { source: 'dist', kind: distMode, space: value || undefined } };
+                                            try { console.log('[Canvas] space changed → sending loadDesignFiles', msg); } catch {}
+                                            vscode.postMessage(msg as any);
+                                        }}
+                                        title="Template Space"
+                                    >
+                                        {spaces.map(s => (
+                                            <option key={s.name} value={s.name}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                            )}
+                        </div>
+                    </div>
+                </div>
+                <div className="canvas-empty">
+                    <div className="empty-state">
+                        <h3>No design files found in <code>.superdesign/design_iterations/</code></h3>
+                        <p>Prompt Superdesign or your preferred AI tool to design UI like <kbd>Help me design a calculator UI</kbd> and preview the UI here</p>
+                    </div>
                 </div>
             </div>
         );
@@ -1107,6 +1238,39 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         <div className="canvas-container">
             {/* Canvas Controls - Clean Minimal Design */}
             <div className="canvas-toolbar">
+                {/* Space Selector Section */}
+                <div className="toolbar-section">
+                    <div className="control-group">
+                        {(Array.isArray(spaces) && spaces.length > 0) && (
+                            <label className="space-selector-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span>Space</span>
+                                <select
+                                    className="canvas-space-selector"
+                                    value={selectedSpace || ''}
+                                    onChange={(e) => {
+                                        const value = e.target.value || null;
+                                        setSelectedSpace(value);
+                                        setIsLoading(true);
+                                        try {
+                                            const prev = savedStateRef.current || vscode?.getState?.() || {};
+                                            const next = { ...prev, canvasSpace: value };
+                                            savedStateRef.current = next;
+                                            vscode?.setState?.(next);
+                                        } catch {}
+                                        const msg = { command: 'loadDesignFiles', data: { source: 'dist', kind: distMode, space: value || undefined } };
+                                        try { console.log('[Canvas] space changed → sending loadDesignFiles', msg); } catch {}
+                                        vscode.postMessage(msg as any);
+                                    }}
+                                    title="Template Space"
+                                >
+                                    {spaces.map(s => (
+                                        <option key={s.name} value={s.name}>{s.name}</option>
+                                    ))}
+                                </select>
+                            </label>
+                        )}
+                    </div>
+                </div>
                 {/* Search Section */}
                 <div className="toolbar-section canvas-search-section">
                     <div className="control-group">
@@ -1302,9 +1466,16 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                         layoutMode,
                         useGlobalViewport,
                         globalViewportMode,
+                        distMode,
                         currentZoom,
                         pan,
                         selectedFrames,
+                        spaces: {
+                            available: spaces,
+                            selected: selectedSpace,
+                            default: defaultSpace,
+                            count: Array.isArray(spaces) ? spaces.length : 0
+                        },
                         transformState: ts ? {
                             scale: ts.scale,
                             positionX: ts.positionX,

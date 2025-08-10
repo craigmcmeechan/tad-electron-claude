@@ -116,6 +116,14 @@ export type ExtensionToWebviewMessage =
     | {
         command: 'designFileRefreshed';
         data: { file: DesignFile };
+    }
+    | {
+        command: 'spaces:init';
+        data: {
+            legacy?: boolean;
+            spaces?: Array<{ name: string; distDir: string }>;
+            defaultSpace?: string;
+        };
     };
 
 // Canvas grid layout types

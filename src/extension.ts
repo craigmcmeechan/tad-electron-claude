@@ -1827,6 +1827,7 @@ class SuperdesignCanvasPanel {
 	private readonly _sidebarProvider: ChatSidebarProvider;
 	private _disposables: vscode.Disposable[] = [];
     private _fileWatchers: vscode.FileSystemWatcher[] = [];
+    private _spacesCache: { spaces: Array<{ name: string; templateRoot: string; distDir: string }>; defaultSpace?: string; error?: string } | null = null;
 
 	public static createOrShow(extensionUri: vscode.Uri, sidebarProvider: ChatSidebarProvider) {
 		const column = vscode.window.activeTextEditor?.viewColumn;
@@ -1861,12 +1862,18 @@ class SuperdesignCanvasPanel {
 		this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 		this._setupFileWatcher();
 
+		// Send spaces configuration (if any) to webview
+		this._postSpacesInit().catch(err => Logger.warn?.('Failed to init spaces: ' + (err instanceof Error ? err.message : String(err))));
+
 		// Handle messages from the webview
 		this._panel.webview.onDidReceiveMessage(
 			message => {
 				switch (message.command) {
-                    case 'loadDesignFiles':
-                        this._loadDesignFiles(message.data);
+					case 'requestSpaces':
+						this._postSpacesInit().catch(err => Logger.warn?.('Failed to init spaces: ' + (err instanceof Error ? err.message : String(err))));
+						break;
+					case 'loadDesignFiles':
+						this._loadDesignFiles(message.data);
 						break;
                     case 'openTemplateFile':
                         if (message.data?.filePath && typeof message.data.filePath === 'string') {
@@ -1995,6 +2002,87 @@ class SuperdesignCanvasPanel {
         }));
 	}
 
+    private async _readSpacesConfig(): Promise<{ spaces: Array<{ name: string; templateRoot: string; distDir: string }>; defaultSpace?: string; error?: string } | null> {
+        try {
+            const ws = vscode.workspace.workspaceFolders?.[0];
+            if (!ws) return null;
+            const uri = vscode.Uri.joinPath(ws.uri, '.superdesign', 'spaces.json');
+
+            let fileContent: Uint8Array;
+            try {
+                fileContent = await vscode.workspace.fs.readFile(uri);
+            } catch (e) {
+                const message = e instanceof Error ? e.message : String(e);
+                const error = `Could not read .superdesign/spaces.json: ${message}`;
+                Logger.warn?.(`[CanvasExt] ${error}`);
+                return { spaces: [], defaultSpace: undefined, error };
+            }
+
+            let json: any;
+            try {
+                json = JSON.parse(Buffer.from(fileContent).toString('utf8'));
+            } catch (e) {
+                const message = e instanceof Error ? e.message : String(e);
+                const error = `Invalid JSON in .superdesign/spaces.json: ${message}`;
+                Logger.warn?.(`[CanvasExt] ${error}`);
+                return { spaces: [], defaultSpace: undefined, error };
+            }
+
+            const rawSpaces = Array.isArray(json?.spaces) ? json.spaces : null;
+            if (!Array.isArray(rawSpaces)) {
+                const error = `Invalid .superdesign/spaces.json: "spaces" must be an array.`;
+                Logger.warn?.(`[CanvasExt] ${error}`);
+                return { spaces: [], defaultSpace: typeof json?.defaultSpace === 'string' ? json.defaultSpace : undefined, error };
+            }
+
+            // Validate shape and normalize to strings
+            const mapped = rawSpaces
+                .map((s: any) => ({
+                    name: String(s?.name || ''),
+                    templateRoot: String(s?.templateRoot || ''),
+                    distDir: String(s?.distDir || '')
+                }))
+                .filter(s => s.name && s.templateRoot && s.distDir);
+
+            if (mapped.length === 0) {
+                const error = `No valid spaces found in .superdesign/spaces.json. Each space requires "name", "templateRoot", and "distDir".`;
+                Logger.warn?.(`[CanvasExt] ${error}`);
+                return { spaces: [], defaultSpace: typeof json?.defaultSpace === 'string' ? json.defaultSpace : undefined, error };
+            }
+
+            return { spaces: mapped, defaultSpace: typeof json?.defaultSpace === 'string' ? json.defaultSpace : undefined };
+        } catch (e) {
+            const message = e instanceof Error ? e.message : String(e);
+            const error = `Unexpected error reading .superdesign/spaces.json: ${message}`;
+            Logger.warn?.(`[CanvasExt] ${error}`);
+            return { spaces: [], defaultSpace: undefined, error };
+        }
+    }
+
+    private async _postSpacesInit() {
+        const cfg = await this._readSpacesConfig();
+        this._spacesCache = cfg;
+        const msg: any = { command: 'spaces:init' };
+        if (cfg && cfg.spaces.length > 0) {
+            msg.data = {
+                spaces: cfg.spaces.map(s => ({ name: s.name, distDir: s.distDir })),
+                defaultSpace: cfg.defaultSpace && cfg.spaces.some(s => s.name === cfg.defaultSpace) ? cfg.defaultSpace : cfg.spaces[0].name
+            };
+        } else {
+            msg.data = { spaces: [], defaultSpace: undefined };
+        }
+        try { Logger.debug(`[CanvasExt] posting spaces:init → ${JSON.stringify(msg.data)}`); } catch {}
+        this._panel.webview.postMessage(msg);
+
+        // Surface loading/validation errors explicitly to the webview
+        if (!cfg || (cfg && cfg.spaces.length === 0)) {
+            const errorMessage = cfg?.error
+                ? cfg.error
+                : 'No template spaces configured. Create a valid .superdesign/spaces.json.';
+            this._panel.webview.postMessage({ command: 'error', data: { error: errorMessage } });
+        }
+    }
+
 	private _update() {
 		const webview = this._panel.webview;
 		this._panel.webview.html = this._getHtmlForWebview(webview);
@@ -2090,7 +2178,7 @@ class SuperdesignCanvasPanel {
 			</html>`;
 	}
 
-	private async _reloadSingleDesignFile(filePath: string) {
+    private async _reloadSingleDesignFile(filePath: string) {
 		if (!filePath) {
 			return;
 		}
@@ -2126,8 +2214,8 @@ class SuperdesignCanvasPanel {
 		}
 	}
 
-        private async _loadDesignFiles(options?: { source?: 'design_iterations' | 'dist'; kind?: 'pages' | 'components' | 'groups' }) {
-		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        private async _loadDesignFiles(options?: { source?: 'design_iterations' | 'dist'; kind?: 'pages' | 'components' | 'groups'; space?: string }) {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 		if (!workspaceFolder) {
 			this._panel.webview.postMessage({
 				command: 'error',
@@ -2139,13 +2227,34 @@ class SuperdesignCanvasPanel {
 		try {
             const source = options?.source === 'dist' ? 'dist' : 'design_iterations';
             let designFolder: vscode.Uri;
+            let distBaseDir: vscode.Uri | null = null;
+            Logger.debug(`[CanvasExt] loadDesignFiles request → ${JSON.stringify(options || {})}`);
             if (source === 'dist') {
-                // Choose subdirectory based on kind
-                const base = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist');
+                // Choose subdirectory based on kind and selected space (if configured)
+                // Determine base dist directory
+                const cfg = this._spacesCache ?? (await this._readSpacesConfig());
+                this._spacesCache = cfg;
+                if (cfg && cfg.spaces.length > 0) {
+                    const chosen = options?.space && cfg.spaces.find(s => s.name === options.space)
+                        ? options?.space
+                        : (cfg.defaultSpace && cfg.spaces.some(s => s.name === cfg.defaultSpace) ? cfg.defaultSpace : cfg.spaces[0].name);
+                    const space = cfg.spaces.find(s => s.name === chosen)!;
+                    distBaseDir = vscode.Uri.file(path.isAbsolute(space.distDir) ? space.distDir : path.join(workspaceFolder.uri.fsPath, space.distDir));
+                    Logger.debug(`[CanvasExt] resolved space='${chosen}' distBaseDir='${distBaseDir.fsPath}'`);
+                } else {
+                    const errorMessage = cfg?.error
+                        ? cfg.error
+                        : 'No template spaces configured. Create .superdesign/spaces.json.';
+                    this._panel.webview.postMessage({ command: 'error', data: { error: errorMessage } });
+                    return;
+                }
+                const base = distBaseDir;
                 const sub = options?.kind === 'components' ? ['components'] : ['pages'];
-                designFolder = vscode.Uri.joinPath(base, ...sub);
+                designFolder = vscode.Uri.joinPath(base!, ...sub);
+                Logger.debug(`[CanvasExt] designFolder='${designFolder.fsPath}'`);
             } else {
                 designFolder = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'design_iterations');
+                Logger.debug(`[CanvasExt] iterations designFolder='${designFolder.fsPath}'`);
             }
 			
             // Check if the target folder exists
@@ -2230,24 +2339,26 @@ class SuperdesignCanvasPanel {
                 let canvasMetadata: any | null = null;
                 if (source === 'dist') {
                     try {
-                        const manifestUri = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist', 'manifest.json');
+                        const manifestUri = distBaseDir ? vscode.Uri.joinPath(distBaseDir, 'manifest.json') : vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist', 'manifest.json');
                         const buf = await vscode.workspace.fs.readFile(manifestUri);
                         manifest = JSON.parse(Buffer.from(buf).toString('utf8'));
+                        Logger.debug(`[CanvasExt] read manifest.json with ${Object.keys(manifest || {}).length} entries`);
                     } catch (e) {
-                        Logger.warn('No manifest.json found under .superdesign/dist; template metadata will be unavailable');
+                        Logger.warn(`[CanvasExt] No manifest.json found for selected build: ${e instanceof Error ? e.message : String(e)}`);
                     }
                     try {
-                        const metaUri = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist', 'canvas-metadata.json');
+                        const metaUri = distBaseDir ? vscode.Uri.joinPath(distBaseDir, 'canvas-metadata.json') : vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist', 'canvas-metadata.json');
                         const buf = await vscode.workspace.fs.readFile(metaUri);
                         canvasMetadata = JSON.parse(Buffer.from(buf).toString('utf8'));
+                        Logger.debug(`[CanvasExt] read canvas-metadata.json with ${Object.keys(canvasMetadata || {}).length} entries`);
                     } catch (e) {
-                        Logger.warn('No canvas-metadata.json found under .superdesign/dist; tags metadata will be unavailable');
+                        Logger.warn(`[CanvasExt] No canvas-metadata.json found for selected build: ${e instanceof Error ? e.message : String(e)}`);
                     }
                 }
 
             // Determine base for relative display names
             const namingBase = (source === 'dist')
-                ? vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist')
+                ? (distBaseDir || vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist'))
                 : vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'design_iterations');
 
 				const loadedFiles = await Promise.all(
@@ -2353,17 +2464,18 @@ class SuperdesignCanvasPanel {
 			);
 
 			// Filter out any failed file reads
-			const validFiles = loadedFiles.filter(file => file !== null);
+            const validFiles = loadedFiles.filter(file => file !== null);
 
-			Logger.info(`Loaded ${validFiles.length} design files (HTML & SVG)`);
+            Logger.info(`[CanvasExt] Loaded ${validFiles.length} design files (HTML & SVG)`);
 			
-			this._panel.webview.postMessage({
+            this._panel.webview.postMessage({
 				command: 'designFilesLoaded',
-				data: { files: validFiles }
+                data: { files: validFiles }
 			});
+            Logger.debug(`[CanvasExt] posted designFilesLoaded`);
 
 		} catch (error) {
-			Logger.error(`Error loading design files: ${error}`);
+            Logger.error(`[CanvasExt] Error loading design files: ${error}`);
 			this._panel.webview.postMessage({
 				command: 'error',
 				data: { error: `Failed to load design files: ${error}` }

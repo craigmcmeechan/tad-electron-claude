@@ -3,113 +3,86 @@
 Scope: `src/webview/components/CanvasView.tsx`, `DesignFrame.tsx`, `ConnectionLines.tsx`, `DesignPanel.tsx`, `src/webview/utils/gridLayout.ts`, `src/webview/types/canvas.types.ts`, and related canvas hosting in `src/extension.ts`.
 
 ## Summary
-- **Strengths**: Clear separation between view, layout utilities, and types; solid selection/drag UX; per-frame/global viewport modes; hierarchy visualization; backend CSS inlining and file watching.
-- **Primary risks**: Unvirtualized iframe rendering, high-frequency state updates and logging, per-iframe service worker injection, recomputation without memoization.
-- **Outcome if addressed**: Substantial gains in frame-count scalability, smoother panning/zooming, simpler security posture, and cleaner path to new layouts/features.
+- **Strengths**: Clear separation between view, layout utilities, and types; solid selection/drag UX; per-frame/global viewport modes; hierarchy and relationships layouts; backend CSS inlining and file watching; search across manifest-backed templates; tags-to-groups view.
+- **Current mitigations in place**: Viewport culling + zoom-based LOD (placeholder vs iframe), RAF-throttled transform and drag updates, memoized frames and connection lines, noisy logs gated behind `DEBUG`.
+- **Primary risks**: Hierarchy layout functions mutate structures (harder to cache/persist); connection point computation is recomputed for dependency changes instead of an identity-cached map; no IntersectionObserver-based mount heuristics; large-graph edges still on SVG.
+- **Outcome of next steps**: Even smoother pan/zoom at scale, simpler caching, and cleaner path to larger graphs and alternate render backends.
 
 ## Strengths
-- **Modular structure**: Layout math in `gridLayout.ts`, typed models in `canvas.types.ts`, and rendering in `DesignFrame.tsx` is a solid baseline.
-- **Good UX primitives**: Selection, drag overlay to prevent iframe capture, global/per-frame viewport control, and hierarchy connections.
-- **Extension integration**: File watcher and CSS inlining reduce broken previews; consistent messaging between webview and extension.
+- **Modular structure**: Layout math in `gridLayout.ts`, typed models in `canvas.types.ts`, rendering in `DesignFrame.tsx` and connection overlay in `ConnectionLines.tsx`.
+- **Good UX primitives**: Selection, drag overlay to prevent iframe capture, global/per-frame viewport control, and hierarchy + relationships views.
+- **Extension integration**: Builder extracts manifest with tags/relationships; extension inlines CSS and streams dist/manifests to canvas; quick open for template sources.
 - **Type safety**: `DesignFile`, `HierarchyTree`, `ConnectionLine` support feature growth.
 
-## Performance issues and risks
-- **No virtualization/culling of frames**
-  - All frames render as iframes regardless of visibility or zoom. This does not scale for dozens/hundreds of frames.
-  - In `CanvasView.tsx`, `getOptimalRenderMode` always returns `iframe`.
+## Performance notes (current state)
+- **Viewport culling + LOD (present)**
+  - Frames outside expanded viewport bounds are not rendered; low zoom uses `placeholder`, above threshold mounts `iframe`. See [CanvasView.tsx](mdc:src/webview/components/CanvasView.tsx) `visibleBounds` and `getOptimalRenderMode`.
 
-- **High-frequency re-renders during transform/drag**
-  - `onTransformed/onZoom/onPanning` update React state directly and log verbosely; causes tree-wide re-renders and jank.
-  - Drag `onMouseMove` sets state on every event without throttling.
+- **Transform and drag updates (throttled)**
+  - Transform state and persistence are throttled via `requestAnimationFrame`; drag moves are RAF-throttled; wheel zoom disabled in favor of precise programmatic zoom/pan.
 
-- **Per-iframe Service Worker injection** in `DesignFrame.tsx`
-  - Injects a SW into every iframe document to handle external images. Likely unsupported within VS Code’s webview iframes and adds overhead; increases complexity and risks.
+- **Memoization (present)**
+  - `DesignFrame` and `ConnectionLines` wrapped in `React.memo` with custom comparators; connections derived via `useMemo`.
 
-- **Connection line recalculation each render**
-  - `updateConnectionPositions` maps and recomputes positions without memoization; scales poorly with node/edge counts.
+- **No per-iframe Service Worker**
+  - Iframes render `srcDoc` with nonce injection for scripts; SW is not injected.
 
-- **Lack of memoization for frames and lines**
-  - `DesignFrame` and `ConnectionLines` are not wrapped in `React.memo`; any parent state change re-renders all frames/lines.
-
-- **Mutable layout utilities**
-  - `calculateHierarchyPositions` mutates the provided tree, making memoization and predictable renders harder.
+- **Areas to improve next**
+  - Hierarchy layout mutates the `HierarchyTree`; prefer pure returns to enable caching and reliable equality checks.
+  - Consider `IntersectionObserver` for mount/unmount heuristics in addition to math-based culling.
+  - Cache connection point computations by frame identity and viewport to avoid recomputing across minor state changes.
+  - For very large graphs, consider Canvas/WebGL rendering of edges.
 
 ## Extensibility gaps
-- **No layout strategy abstraction**
-  - Grid and hierarchy logic are embedded into the main view/utilities. A pluggable `LayoutStrategy` makes new layouts (flow, masonry, swimlanes) easier.
-
+- **Layout strategy surface**
+  - Relationship layout is a separate module, but there is no formal `LayoutStrategy` interface. Adding one would make new layouts (flow, masonry, swimlanes) pluggable.
 - **State orchestration**
-  - Multiple interdependent state slices in `CanvasView` (zoom, viewports, custom positions, layout mode, selections) could benefit from a reducer + derived selectors to support future grouping, filtering, and saved layouts.
-
-- **Rendering backend scalability**
-  - SVG is fine for tens of connection lines; Canvas/WebGL would be preferable for large graphs. Worker-based path computation may help for complex layouts.
+  - Multiple interdependent state slices in `CanvasView` remain manageable but could later benefit from a reducer/selectors for saved layouts, grouping, and filters.
 
 ## Recommendations (prioritized)
-1. **Introduce virtualization/culling for frames**
-   - Render only frames within the visible viewport plus a buffer; mount placeholders for offscreen frames.
-   - Re-enable zoom-based LOD: show placeholders below a zoom threshold; mount iframe above threshold.
-   - Add `IntersectionObserver` to lazy-mount iframes when they enter view.
+1. **Make hierarchy layout pure**
+   - Return a new `HierarchyTree` with updated positions/bounds without mutating inputs.
+2. **Add IntersectionObserver-based mount hints**
+   - Use it to complement mathematical culling for stable mount/unmount at viewport edges.
+3. **Connection point caching**
+   - Cache by `(from, to, viewportMode(s), dimensions, customPositions)` key for large designs.
+4. **Layout strategy interface**
+   - Introduce `LayoutStrategy` with `computePositions(...)` and `computeConnections(...)`; implement for `grid`, `hierarchy`, `relationships`.
+5. **Optional: Edge backend**
+   - Keep SVG by default; switch to Canvas/WebGL when connections exceed a threshold.
 
-2. **Throttle/debounce transform and drag updates; gate logs**
-   - Track transient zoom/pan in `useRef`; update React state on `requestAnimationFrame` or debounced intervals (16–33ms).
-   - Throttle drag move updates; commit final position on drag end.
-   - Remove or guard console logs behind a `DEBUG` flag.
+## Quick wins (remaining)
+- Convert hierarchy layout functions in [gridLayout.ts](mdc:src/webview/utils/gridLayout.ts) to pure functional returns.
+- Extract toolbar controls from [CanvasView.tsx](mdc:src/webview/components/CanvasView.tsx) to reduce re-render surface.
+- Add a lightweight connection-point cache keyed by frame identity + viewport.
 
-3. **Memoize frames and connection lines**
-   - Wrap `DesignFrame` and `ConnectionLines` in `React.memo` with custom comparators (position, selection, viewport, identity).
-   - Memoize connection point computation with dependencies on tree/positions/viewports.
-
-4. **Remove per-iframe Service Worker injection**
-   - Rely on backend preprocessing (already inlining CSS). Avoid `'unsafe-eval'` and overly permissive CSP inside iframe content.
-
-5. **Refactor layout utilities to pure functions**
-   - Have `calculateHierarchyPositions` return a new tree instance without mutation to enable stable memoization and easier testing.
-
-6. **Extract a layout strategy interface**
-   - Define `LayoutStrategy` with `computePositions(files, config)` and `computeConnections(tree, config)`; register strategies for `grid`, `hierarchy`, etc.
-
-7. **Decompose `CanvasView`**
-   - Move toolbar/controls to separate components to keep the canvas subtree stable. Use selectors to feed only necessary props to children.
-
-8. **Optional: Switch connection rendering backend for large graphs**
-   - Keep SVG for moderate sizes; introduce Canvas/WebGL path when edge count crosses a threshold.
-
-## Quick wins (low risk, high value)
-- Wrap `DesignFrame` and `ConnectionLines` with `React.memo` now.
-- Re-enable zoom-based placeholders to avoid mounting iframes at low zoom.
-- Debounce `setCurrentZoom` and strip transform/pan logs.
-- Remove Service Worker injection from `DesignFrame` iframes.
-- Memoize `updateConnectionPositions` and hierarchical bounds.
+## Minimally invasive changes implemented
+- **Log gating**: Guarded chat/canvas loader logs behind `DEBUG` in [CanvasView.tsx](mdc:src/webview/components/CanvasView.tsx) to reduce console pressure in production webviews.
+- **Stronger culling**: Skip rendering offscreen frames entirely (including placeholders) unless explicitly forced; further reduces DOM churn while panning.
 
 ## Suggested implementation notes
 - **Virtualization**
-  - Compute view bounds from transform state (scale, translateX/Y). Only map frames whose `x/y + width/height` intersect the expanded bounds.
-  - Keep a small buffer (e.g., 1–2 screens) to reduce mount thrash when panning.
-
+  - Use transform state to compute visible bounds plus buffer. Only map frames whose rect intersects the expanded bounds.
 - **LOD (level-of-detail)**
-  - If `zoom < threshold`, render lightweight placeholders (name, dimensions, status). When crossing threshold, mount iframe and show loading overlay.
-
+  - Keep `zoom < threshold` → placeholder; otherwise mount `iframe` and show loading overlay.
 - **Transform handling**
-  - Maintain a ref: `transformRefState.current = { scale, x, y }`; schedule a single RAF to update React state and downstream memoized computations.
-
+  - Maintain refs for transient state; batch updates via RAF; persist snapshots less frequently.
 - **Drag loop**
-  - Store pointer deltas in refs and update visual position via inline style within an RAF loop; persist to state on drop for layout saving.
-
+  - Capture pointer deltas in refs; RAF update visuals; persist on drop; snap-to-grid for cleanliness.
 - **Pure layout**
-  - Return new `HierarchyTree` objects. Keep nodes immutable (`{ ...node, position: ... }`) to enable shallow-equality memo checks.
-
+  - Immutable `HierarchyTree` enables shallow memo and persistent caches.
 - **Security/CSP**
-  - Avoid injecting permissive CSP (`'unsafe-eval'`, overly wide `connect-src`) into `srcDoc`; prefer deterministic, inlined assets.
+  - Continue nonce injection and avoid permissive CSP in `srcDoc`.
 
 ## Actionable checklist
-- [ ] Add `React.memo` to `DesignFrame` and `ConnectionLines` with custom prop equality.
-- [ ] Implement viewport-based culling with buffer; integrate `IntersectionObserver` for iframe lazy-mount.
-- [ ] Restore zoom-based render mode (placeholder vs iframe) with a sensible threshold.
-- [ ] Debounce/RAF-transform updates; throttle drag move; remove/guard logs.
-- [ ] Remove Service Worker injection in `DesignFrame` iframes.
+- [x] Memoize `DesignFrame` and `ConnectionLines` with custom prop equality.
+- [x] Implement viewport-based culling with buffer and zoom-based LOD.
+- [ ] Add `IntersectionObserver` for mount/unmount edging.
+- [x] Debounce/RAF transform updates; throttle drag move; guard logs behind `DEBUG`.
+- [x] Verify no per-iframe Service Worker injection is present.
 - [ ] Make `calculateHierarchyPositions` pure; memoize connection point calculations.
 - [ ] Extract toolbar into a separate component; keep canvas subtree stable.
-- [ ] Introduce `LayoutStrategy` interface and register `grid`/`hierarchy` strategies.
+- [ ] Introduce `LayoutStrategy` interface and register `grid`/`hierarchy`/`relationships` strategies.
 - [ ] Consider Canvas/WebGL path for connections when edge count is high.
 
 ## Expected impact
