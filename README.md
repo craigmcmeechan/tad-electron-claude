@@ -130,6 +130,26 @@ Build and preview:
 - Run “Tad: Compile Templates” to produce `.tad/dist/pages/**.html` and component previews under `.tad/dist/components/**`
 - Open the Canvas via “Tad: Open Canvas View” to browse outputs, relationships, and tags
 
+#### Component states (data)
+
+Provide data to component macros via a sibling `*.states.json` file. For a component file `components/hello-card.njk`, create `components/hello-card.states.json`:
+
+```json
+{
+  "default": { "props": { "title": "Welcome", "message": "This is a card." } },
+  "cta":     { "props": { "title": "Continue", "ctaHref": "#/next", "ctaLabel": "Next" } }
+}
+```
+
+The builder will generate preview pages:
+- `.tad/dist/{space}/components/hello-card/default.html`
+- `.tad/dist/{space}/components/hello-card/cta.html`
+
+Notes:
+- Keys are state names; each contains a `props` object passed to the macro.
+- If no `*.states.json` is present, a `default` state with `{}` props is used.
+- Canvas lists component states and links to the generated previews.
+
 ### Commands
 
 - tad: Open Canvas View (`tad.openCanvas`)

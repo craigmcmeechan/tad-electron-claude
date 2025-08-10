@@ -92,6 +92,30 @@ For multi-space setups, define `.tad/spaces.json` and see the “Spaces” secti
 
 ---
 
+### Component states (data)
+
+Component files under `components/**/Name.njk` can define a sibling `components/**/Name.states.json` to provide example data for preview generation. Each top-level key is a state name with a `props` object passed to the macro at render time.
+
+Example (`components/hello-card.states.json`):
+
+```json
+{
+  "default": { "props": { "title": "Welcome", "message": "This is a card." } },
+  "cta":     { "props": { "title": "Continue", "ctaHref": "#/next", "ctaLabel": "Next" } }
+}
+```
+
+Builder behavior:
+- Generates wrapper preview pages at `dist/components/**/Name/{state}.html` for each state.
+- Produces an index at `dist/components/index.html` and `index.json` listing components and state outputs.
+- If the states file is missing, a single `default` state with empty props is used.
+
+Canvas behavior:
+- Lists component states and links to the generated previews.
+- Shows tags if present (via frontmatter or inline directives) on component previews.
+
+---
+
 ### Directory Conventions (per space)
 
 Under a configured `templateRoot`:
