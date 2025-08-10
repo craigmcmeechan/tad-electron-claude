@@ -1,0 +1,38 @@
+{#
+relationships:
+  prev:
+    - pages/1.home.njk
+#}
+
+{% from 'container.njk' import container %}
+{% from 'footer.njk' import footer %}
+{% from 'hello-card.njk' import helloCard %}
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sample · About {{ titleSuffix }}</title>
+    <link rel="stylesheet" href="{{ designSystemCssHref }}" />
+  </head>
+  <body>
+    <div class="page">
+      {{ container({
+        body: [
+          '<h1 class="page-title">About</h1>',
+          helloCard({
+            title: 'About This Sample',
+            message: 'Demonstrates a minimal space with a component, container, footer, and design system.',
+            ctaHref: '1.home.html',
+            ctaLabel: 'Back to Home'
+          })
+        ] | join('')
+      }) }}
+
+      {{ footer({ text: 'Sample Space · About' }) }}
+    </div>
+  </body>
+</html>
+
+

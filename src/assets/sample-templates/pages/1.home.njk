@@ -1,0 +1,38 @@
+{#
+relationships:
+  next:
+    - pages/2.about.njk
+#}
+
+{% from 'container.njk' import container %}
+{% from 'footer.njk' import footer %}
+{% from 'hello-card.njk' import helloCard %}
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sample · Home {{ titleSuffix }}</title>
+    <link rel="stylesheet" href="{{ designSystemCssHref }}" />
+  </head>
+  <body>
+    <div class="page">
+      {{ container({
+        body: [
+          '<h1 class="page-title">Sample Home</h1>',
+          helloCard({
+            title: 'Welcome',
+            message: 'This is a minimal sample page using a basic component.',
+            ctaHref: '2.about.html',
+            ctaLabel: 'Go to About'
+          })
+        ] | join('')
+      }) }}
+
+      {{ footer({ text: 'Sample Space · Home' }) }}
+    </div>
+  </body>
+</html>
+
+

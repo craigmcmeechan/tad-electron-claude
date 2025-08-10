@@ -1,0 +1,16 @@
+{% macro footer(props) %}
+<footer class="footer">
+  <div class="container footer-inner">
+    <span class="muted">{{ props.text or 'Sample Space Footer' }}</span>
+    {% if props.links %}
+      <nav class="footer-nav">
+        {% for link in props.links %}
+          <a class="link" href="{{ link.href }}">{{ link.label }}</a>
+        {% endfor %}
+      </nav>
+    {% endif %}
+  </div>
+</footer>
+{% endmacro %}
+
+

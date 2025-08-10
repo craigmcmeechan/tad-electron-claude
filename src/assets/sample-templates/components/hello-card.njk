@@ -1,0 +1,16 @@
+{% macro helloCard(props) %}
+<section class="card hello-card" aria-label="Hello card">
+  <h2 class="hello-title">{{ props.title or 'Hello' }}</h2>
+  {% if props.message %}
+    <p class="hello-text">{{ props.message }}</p>
+  {% endif %}
+  {% if props.ctaHref and props.ctaLabel %}
+    <a class="btn" href="{{ props.ctaHref }}">{{ props.ctaLabel }}</a>
+  {% endif %}
+  {% if props.body %}
+    {{ props.body | safe }}
+  {% endif %}
+  </section>
+{% endmacro %}
+
+
