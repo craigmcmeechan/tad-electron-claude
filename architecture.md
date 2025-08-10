@@ -179,7 +179,7 @@ Tad is a VS Code extension for authoring and navigating large Nunjucks template 
 - Nunjucks navigation:
   - Cursor inside include/relationship path → parse ranges → resolver tries relative, roots/space, content dirs, then basename search → open target; unresolved targets surface diagnostics and hover/link tooltips
 - Build & preview:
-  - Run “Build Templates (tad)” → ensure/sync builder → install deps if needed → run build → Canvas watches dist folders and posts updates → when opening files, Canvas inlines local CSS for accurate preview
+  - Run “Compile Templates (tad)” → ensure/sync builder → install deps if needed → run build → Canvas watches dist folders and posts updates → when opening files, Canvas inlines local CSS for accurate preview
 - Chat streaming and tool calls:
   - Webview sends `chatMessage` with `CoreMessage[]` → agent streams assistant/tool-call deltas → tools operate inside `.tad/` and stream results → UI reflects progress and actions → `chatStreamEnd`
 - Canvas ↔ Chat bridging:

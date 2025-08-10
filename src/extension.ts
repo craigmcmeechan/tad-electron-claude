@@ -1578,7 +1578,7 @@ Logger.info('Tad extension is now active!');
         return { builderDir, buildJs: vscode.Uri.joinPath(builderDir, 'build.js'), seeded: true } as const;
     };
 
-    // Register build templates command
+    // Register compile templates command
     const buildTemplatesDisposable = vscode.commands.registerCommand('tad.buildTemplates', async () => {
 		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 		if (!workspaceFolder) {
@@ -2359,7 +2359,7 @@ class tadCanvasPanel {
                 if (!hasAny) {
                     this._panel.webview.postMessage({
                         command: 'error',
-				data: { error: `No build output found at ${baseDist.fsPath}. Use the "Build Templates (tad)" command to generate build output (this will auto-seed a builder if bundled).` }
+                data: { error: `No build output found at ${baseDist.fsPath}. Use the "Compile Templates (tad)" command to generate build output (this will auto-seed a builder if bundled).` }
                     });
                     return;
                 }
@@ -2371,7 +2371,7 @@ class tadCanvasPanel {
                         // Don't create dist folders; instruct user to build
                         this._panel.webview.postMessage({
                             command: 'error',
-				data: { error: `No build output found at ${designFolder.fsPath}. Use the "Build Templates (tad)" command to generate build output (this will auto-seed a builder if bundled).` }
+                data: { error: `No build output found at ${designFolder.fsPath}. Use the "Compile Templates (tad)" command to generate build output (this will auto-seed a builder if bundled).` }
                         });
                         return;
                     } else {

@@ -72,7 +72,7 @@
       },
       {
         "command": "tad.buildTemplates",
-        "title": "Build Templates (tad)",
+        "title": "Compile Templates (tad)",
         "category": "tad",
         "icon": "$(run)"
       },

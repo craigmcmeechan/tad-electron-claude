@@ -283,7 +283,7 @@ Canvas behavior:
 
 From VS Code (recommended):
 
-- Command: "tad: Build Templates" (`tad.buildTemplates`)
+- Command: "tad: Compile Templates" (`tad.buildTemplates`)
   - Ensures a builder exists in `.tad/builder` (syncs from packaged assets if necessary)
   - Detects package manager, installs dependencies on first run, and executes the build
   - Streams output to the Tad output channel and refreshes the Canvas on completion
