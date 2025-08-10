@@ -1,7 +1,7 @@
 ## Tad - Template-assisted design for developers
 
 
-[Tad main interface](screenshot/main.png)
+![Tad main interface](screenshots/main.png)
 
 
 Tad implements a comprehensive design process that is friendly to engineers and agents alike, from the comfort of your IDE. It combines a Nunjucks template engine with built-in navigation, auto-complete and validation, with a powerful in-IDE Canvas to visualise your entire application design system, from token to collections. Bring your own coding agent and build a low-fidelity mock system in pure code. No mouse required.
@@ -10,7 +10,7 @@ Tad implements a comprehensive design process that is friendly to engineers and 
 
 ### Highlights
 
-[Tad canvas](screenshot/canvas.png)
+![Tad canvas](screenshots/canvas.png)
 
 - **Canvas (Webview)**
   - View your entire application and component library in an IDE pane 
