@@ -1,92 +1,86 @@
-# 🧠 SuperDesign — AI Design Agent for Your IDE
+#
+### New name required — Template Builder System Integration for VS Code
 
-![SuperDesign Cover](cover.png)
-
-### **By:** [AI Jason](https://x.com/jasonzhou1993) & [JackJack](https://x.com/jackjack_eth)
-
-SuperDesign is the first **open-source design agent** that lives right inside your IDE.  
-Generate UI mockups, components, and wireframes directly from natural language prompts.  
-Works seamlessly with Cursor, Windsurf, and plain VS Code.
-
-> ✨ "Why design one option when you can explore ten?" — SuperDesign
-
-[Join discord](https://discord.gg/FYr49d6cQ9)
-
-[Upvote on Hackernews](https://news.ycombinator.com/item?id=44376003)
-
-[Install guide](https://www.superdesign.dev/)
+Superdesign now focuses on helping you build and navigate large Nunjucks-based template systems inside VS Code. It indexes your templates, provides smart navigation and completions, validates references, and exposes a simple "Build Templates" command to integrate with your site/app builder. Optional template-to-output mapping lets you jump from compiled files back to their source templates.
 
 ---
 
-## 🎬 Demo Video (Click to play)
+### Key features
 
-[![SuperDesign Demo](https://img.youtube.com/vi/INv6oZDhhUM/maxresdefault.jpg)](https://youtu.be/INv6oZDhhUM)
+- **Nunjucks language support**
+  - Go to definition for `include`, `import`, and `extends` targets
+  - Document symbols for blocks/macros to improve Outline/Go to Symbol
+  - Filename/path completion across your configured template roots
+  - Real-time diagnostics for unresolved/ignored template references
 
----
+- **Cross-project template indexing**
+  - Indexes templates across multiple roots via `superdesign.nunjucks.templateRoots`
+  - Watches the workspace and updates suggestions as files change
 
-## 🚀 Features
-
-- 🖼️ **Product Mock**: Instantly generate full UI screens from a single prompt
-- 🧩 **UI Components**: Create reusable components you can drop into your code
-- 📝 **Wireframes**: Explore low-fidelity layouts for fast iteration
-- 🔁 **Fork & Iterate**: Duplicate and evolve designs easily
-- 📥 **Prompt-to-IDE**: Copy prompts into your favorite AI IDE (Cursor, Windsurf)
-
----
-
-## 🧠 Works Great With Cursor, Windsurf, VS Code
-
-👉 [Install here](https://www.superdesign.dev/)
+- **Builder integration (optional)**
+  - Command: "Superdesign: Build Templates" to trigger your build workflow
+  - Supports an optional manifest at `.superdesign/dist/manifest.json` to map compiled outputs back to source templates and components
 
 ---
 
-## 🛠️ Getting Started
+### Getting started
 
-1. **Install the Extension** from the Cursor/VS Code Marketplace
-2. Open the `SuperDesign` sidebar panel
-3. Type a prompt (e.g., _"Design a modern login screen"_)
-4. View generated mockups, components, and wireframes
-5. Fork, tweak, and paste into your project
-
----
-
-## Can I use my own Cursor subscription?
-Yes, after you initialise superdesign extension, some Cursor/Windsurf rules will be added, so you can prompt the agent to do design and preview in superdesign canvas (Ctrl/Cmd + Shift + P → Superdesign: Open Canvas View)
-
-If using Cursor - I will highly suggest copy the prompt in 'design.mdc' and create a custom mode in cursor with that same system prompt; This should give you much better performance
-
-Instructions here (Click to play): 
-[![Instruction video](v0.0.11.png)](https://youtu.be/KChmJMCDOB0?si=pvU0kNRO4GRWjsec&t=122)
-
-## 📂 Where Are My Designs Stored?
-
-Your generated designs are saved locally inside `.superdesign/`.
+1. Configure template roots in VS Code Settings → search for "Superdesign":
+   - `superdesign.nunjucks.templateRoots` (default: `.superdesign/templates`, `.`)
+   - `superdesign.nunjucks.defaultExtensions` (default: `.njk`, `.nunjucks`, `.html`)
+   - `superdesign.nunjucks.ignore` (default: ignores `node_modules` and `.superdesign/dist`)
+2. Open any `.njk`/`.nunjucks`/`.html` template and use:
+   - Go to Definition on include/import/extends targets
+   - Symbols in the Outline view
+   - Path completion when typing in quotes
+3. Optional: wire up your build and emit a manifest for template mapping (see below).
 
 ---
 
-## ❓ FAQ
+### Template → Output manifest (optional)
 
-**Is it free and open source?**  
-Yes! We are open source — fork it, extend it, remix it.
+If your builder emits a manifest at `.superdesign/dist/manifest.json`, Superdesign will use it to surface which templates and components produced each compiled file. This enables quick navigation from outputs back to sources during review.
 
-**Can I customize the design agent?**  
-Yes — use your own prompt templates, modify behaviors, or add commands.
+Schema example (per compiled file path relative to `.superdesign/dist/`):
 
-**Can SuperDesign update existing UI?**  
-Absolutely — select a component, describe the change, and let the agent do the rest.
+```json
+{
+  "pages/home.html": {
+    "page": { "name": "HomePage", "path": "src/pages/HomePage.tsx" },
+    "components": [
+      { "name": "Header", "path": "src/components/Header.tsx" },
+      { "name": "Hero",   "path": "src/components/Hero.tsx" }
+    ],
+    "elements": [
+      { "name": "Button", "path": "src/ui/Button.tsx" }
+    ]
+  }
+}
+```
 
-<img width="886" height="586" alt="image" src="https://github.com/user-attachments/assets/71b7cfcc-6123-40ea-aae5-05ea6cdcea96" />
+Notes:
+- Keys must match file paths your preview or review flow loads (e.g., `pages/*.html`, `components/*.html`).
+- `path` can be absolute or workspace-relative. If omitted, names are shown but files cannot be opened.
 
-
-**How can I contribute?**  
-Pull requests are welcome. Star the repo and join us on [Discord](https://discord.gg/XYZ)!
+See more details in `build.md` under "Build Manifest (for Canvas → Template Mapping)".
 
 ---
 
-## 🔗 Links
+### Commands
 
-- 🌐 Website: [https://superdesign.dev](https://superdesign.dev)
-- 📦 GitHub: [https://github.com/superdesigndev/superdesign](https://github.com/superdesigndev/superdesign)
-- 💬 Discord: [Join the Community](https://discord.gg/XYZ)
-- 🐦 Twitter / X: [@SuperDesignDev](https://x.com/SuperDesignDev)
+- "Superdesign: Build Templates" — run your template builder workflow.
+
+---
+
+### Configuration
+
+- `superdesign.nunjucks.templateRoots`: directories to search for templates
+- `superdesign.nunjucks.defaultExtensions`: extensions to resolve when no extension is provided
+- `superdesign.nunjucks.ignore`: glob patterns to exclude from indexing
+
+---
+
+### Contributing & License
+
+Contributions are welcome. See `build.md` for local build and development notes. Licensed under MIT.
 
