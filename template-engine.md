@@ -18,6 +18,80 @@ If `spaces.json` is missing, the builder defaults to a legacy single space roote
 
 ---
 
+### Templating basics (quick reference)
+
+Author templates under these folders (per space):
+
+- `pages/` — Rendered to final HTML. Examples: [1.home.njk](mdc:src/assets/sample-templates/pages/1.home.njk), [2.about.njk](mdc:src/assets/sample-templates/pages/2.about.njk)
+- `components/` — Macro-based components with preview pages. Example: [hello-card.njk](mdc:src/assets/sample-templates/components/hello-card.njk)
+- `elements/` — Lower-level partials. Examples: [container.njk](mdc:src/assets/sample-templates/elements/container.njk), [footer.njk](mdc:src/assets/sample-templates/elements/footer.njk)
+- `styles/` — Shared CSS copied to the space root. Example: [design-system.css](mdc:src/assets/sample-templates/styles/design-system.css)
+
+Component macro example:
+
+```nunjucks
+{% macro helloCard(props) %}
+<section class="card hello-card" aria-label="Hello card">
+  <h2 class="hello-title">{{ props.title or 'Hello' }}</h2>
+  {% if props.message %}
+    <p class="hello-text">{{ props.message }}</p>
+  {% endif %}
+  {% if props.ctaHref and props.ctaLabel %}
+    <a class="btn" href="{{ props.ctaHref }}">{{ props.ctaLabel }}</a>
+  {% endif %}
+</section>
+{% endmacro %}
+```
+
+Using elements and the component in a page, with relationships at the top:
+
+```nunjucks
+{#
+relationships:
+  next:
+    - pages/2.about.njk
+#}
+{% from 'container.njk' import container %}
+{% from 'footer.njk' import footer %}
+{% from 'hello-card.njk' import helloCard %}
+...
+<link rel="stylesheet" href="{{ designSystemCssHref }}" />
+...
+{{ container({
+  body: [
+    '<h1 class="page-title">Sample Home</h1>',
+    helloCard({ title: 'Welcome', ctaHref: '2.about.html', ctaLabel: 'Go to About' })
+  ] | join('')
+}) }}
+{{ footer({ text: 'Sample Space · Home' }) }}
+```
+
+Notes:
+- Place relationship annotations at the very top of page files in a Nunjucks comment block. Shorthand is supported: `{# @rel next: pages/2.about.njk #}`.
+- Import macros via `{% from 'file.njk' import macro %}` and pass a `props` object.
+- The builder injects `designSystemCssHref` for easy stylesheet linking.
+
+---
+
+### Getting started: Template space
+
+Single-space (default/legacy) workflow:
+
+1) Create `.tad/templates/` with subfolders `pages/`, `components/`, `elements/`, `styles/`. You can use “tad: Create Template Space” to scaffold.
+
+2) Author templates following the samples above (see `src/assets/sample-templates/**`).
+
+3) Build:
+- Run “Tad: Sync Builder” once to seed `.tad/builder/`
+- Run “Tad: Compile Templates” to generate outputs under `.tad/dist/`
+
+4) Preview:
+- Open “Tad: Open Canvas View” to browse rendered pages, component previews, tags, and relationships
+
+For multi-space setups, define `.tad/spaces.json` and see the “Spaces” section below.
+
+---
+
 ### Directory Conventions (per space)
 
 Under a configured `templateRoot`:

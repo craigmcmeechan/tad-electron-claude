@@ -54,6 +54,82 @@ For multi-space or deeper builder details, see [build.md](mdc:build.md) and [tem
 
 ---
 
+### Templating basics
+
+Tad uses Nunjucks templates organized into `pages/`, `components/`, `elements/`, and `styles/`. See the minimal sample space under `src/assets/sample-templates/`:
+
+- `pages/` — Page templates rendered to final HTML outputs. Example: [1.home.njk](mdc:src/assets/sample-templates/pages/1.home.njk), [2.about.njk](mdc:src/assets/sample-templates/pages/2.about.njk)
+- `components/` — Macro-based components rendered to preview pages with states. Example: [hello-card.njk](mdc:src/assets/sample-templates/components/hello-card.njk)
+- `elements/` — Lower-level partials used by pages/components. Examples: [container.njk](mdc:src/assets/sample-templates/elements/container.njk), [footer.njk](mdc:src/assets/sample-templates/elements/footer.njk)
+- `styles/` — Optional shared stylesheet copied into the build output. Example: [design-system.css](mdc:src/assets/sample-templates/styles/design-system.css)
+
+Minimal component macro (from `components/hello-card.njk`):
+
+```nunjucks
+{% macro helloCard(props) %}
+<section class="card hello-card" aria-label="Hello card">
+  <h2 class="hello-title">{{ props.title or 'Hello' }}</h2>
+  {% if props.message %}
+    <p class="hello-text">{{ props.message }}</p>
+  {% endif %}
+  {% if props.ctaHref and props.ctaLabel %}
+    <a class="btn" href="{{ props.ctaHref }}">{{ props.ctaLabel }}</a>
+  {% endif %}
+</section>
+{% endmacro %}
+```
+
+Using elements and the component in a page (from `pages/1.home.njk`):
+
+```nunjucks
+{#
+relationships:
+  next:
+    - pages/2.about.njk
+#}
+
+{% from 'container.njk' import container %}
+{% from 'footer.njk' import footer %}
+{% from 'hello-card.njk' import helloCard %}
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sample · Home {{ titleSuffix }}</title>
+    <link rel="stylesheet" href="{{ designSystemCssHref }}" />
+  </head>
+  <body>
+    <div class="page">
+      {{ container({
+        body: [
+          '<h1 class="page-title">Sample Home</h1>',
+          helloCard({
+            title: 'Welcome',
+            message: 'This is a minimal sample page using a basic component.',
+            ctaHref: '2.about.html',
+            ctaLabel: 'Go to About'
+          })
+        ] | join('')
+      }) }}
+
+      {{ footer({ text: 'Sample Space · Home' }) }}
+    </div>
+  </body>
+</html>
+```
+
+Notes:
+- Import macros from `components/` and `elements/` with `{% from 'file.njk' import macroName %}` and pass a `props` object for component macros.
+- Add page relationships at the very top inside a Nunjucks comment block. You can also use the compact form `{# @rel next: pages/2.about.njk #}`. See the section below for details.
+- The builder injects `designSystemCssHref` so pages can link the shared stylesheet.
+
+Build and preview:
+- Run “Tad: Sync Builder” once to seed `.tad/builder/`
+- Run “Tad: Compile Templates” to produce `.tad/dist/pages/**.html` and component previews under `.tad/dist/components/**`
+- Open the Canvas via “Tad: Open Canvas View” to browse outputs, relationships, and tags
+
 ### Commands
 
 - tad: Open Canvas View (`tad.openCanvas`)
