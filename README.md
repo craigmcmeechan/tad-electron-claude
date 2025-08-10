@@ -64,6 +64,20 @@ Notes:
 
 See more details in `build.md` under "Build Manifest (for Canvas → Template Mapping)".
 
+### Canvas metadata for tags (optional)
+If your builder emits tags per compiled output at `.superdesign/dist/canvas-metadata.json`, the Canvas will display tag badges and you can organize frames by logical collections.
+
+Example:
+
+```json
+{
+  "pages/home.html": { "tags": ["landing", "marketing", "v1"] },
+  "components/card.html": { "tags": ["ui", "card", "atoms"] }
+}
+```
+
+See `build.md` for the full schema.
+
 ---
 
 ### Commands

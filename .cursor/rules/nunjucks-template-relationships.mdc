@@ -1,0 +1,124 @@
+---
+description: Nunjucks-compatible template annotations for directional page-to-page relationships
+globs: .superdesign/templates/pages/**/*.njk
+alwaysApply: true
+---
+
+- **Purpose**: Define a simple, Nunjucks-compatible way for page templates to declare relationships to other page templates (e.g., next/prev, parent/child, related).
+- **Placement**: Put relationship annotations at the very top of the file inside a Nunjucks comment block.
+- **Compatibility**: Uses only Nunjucks comments `{# ... #}` so it never affects rendering.
+- **Resolution**: Targets resolve to templates using configured template roots and default extensions.
+
+### Relationship keys (directional)
+- **next**: One or more pages that this page flows to.
+- **prev**: One or more pages that flow into this page (previous step/back).
+- **parent**: One or more hierarchical parent pages of this page.
+- **children**: One or more hierarchical child pages of this page.
+- **related**: One or more contextually related pages (treated as directional; tooling may optionally mirror it).
+
+Notes:
+- Use arrays for multiple targets. Single strings are also allowed; prefer arrays for consistency.
+- Targets can be given as:
+  - Workspace-relative paths (recommended), e.g. `.superdesign/templates/pages/2.studyview.0.home.njk`
+  - Template-root-relative paths, e.g. `pages/2.studyview.0.home.njk`
+  - Paths without extension; resolution will try configured default extensions.
+
+### Recommended annotation (YAML-in-comment)
+
+```nunjucks
+{#
+relationships:
+  next:
+    - pages/2.studyview.0.home.njk
+  related:
+    - pages/3.library.overview.njk
+  children: []
+#}
+```
+
+Minimal single-line alternative for quick edits:
+
+```nunjucks
+{# @rel next: pages/2.studyview.0.home.njk #}
+{# @rel related: pages/3.library.overview.njk, pages/4.notes.index.njk #}
+```
+
+Both forms are supported. Prefer the YAML block for readability and tooling.
+
+### Examples from this codebase
+
+Add relationships to the Home Dashboard page [1.home_dashboard.njk](mdc:.superdesign/templates/pages/1.home_dashboard.njk):
+
+```nunjucks
+{#
+relationships:
+  next:
+    - pages/2.studyview.0.home.njk
+  related:
+    - pages/1.home_dashboard.njk  # self-links are allowed but usually unnecessary
+#}
+```
+
+Or a compact form:
+
+```nunjucks
+{# @rel next: pages/2.studyview.0.home.njk #}
+```
+
+Annotate the Study View home page [2.studyview.0.home.njk](mdc:.superdesign/templates/pages/2.studyview.0.home.njk):
+
+```nunjucks
+{#
+relationships:
+  prev:
+    - pages/1.home_dashboard.njk
+  parent:
+    - pages/2.studyview.index.njk
+#}
+```
+
+### DO and DON'T
+
+```nunjucks
+{# ✅ DO: place at the very top of the file #}
+{#
+relationships:
+  next: [pages/2.studyview.0.home]
+#}
+<!DOCTYPE html>
+```
+
+```nunjucks
+{# ❌ DON'T: mix with executable statements before the annotation #}
+<!DOCTYPE html>
+{#
+relationships:
+  next: [pages/2.studyview.0.home]
+#}
+```
+
+```nunjucks
+{# ✅ DO: use arrays for multiple targets #}
+{#
+relationships:
+  related:
+    - pages/3.library.overview
+    - pages/4.notes.index
+#}
+```
+
+```nunjucks
+{# ❌ DON'T: include wildcards/globs; list exact targets #}
+{# @rel related: pages/*.njk #}
+```
+
+### Resolution rules
+- Paths are resolved relative to configured template roots (`superdesign.nunjucks.templateRoots`) and default extensions (`superdesign.nunjucks.defaultExtensions`).
+- If an extension is omitted, resolution will try the configured extensions in order.
+- Unresolved targets should surface as diagnostics in tooling that implements this rule.
+
+### Suggested future tooling (non-blocking)
+- Index and graph page relationships (next/prev/parent/children/related) for navigation.
+- Provide diagnostics and quick-fixes for unresolved relationship targets.
+- Offer path completion inside the annotation comments for common relations.
+

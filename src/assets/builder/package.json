@@ -1,0 +1,17 @@
+{
+  "name": "superdesign-builder",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Superdesign template compiler",
+  "type": "commonjs",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "dependencies": {
+    "fs-extra": "^11.3.1",
+    "glob": "^11.0.3",
+    "js-beautify": "^1.15.4",
+    "nunjucks": "^3.2.4"
+  }
+}
+

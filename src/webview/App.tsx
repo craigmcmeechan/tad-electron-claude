@@ -50,15 +50,16 @@ const App: React.FC = () => {
         document.head.appendChild(styleElement);
         console.log('🎨 CSS styles injected');
 
-        // Get context from window (only needed for chat interface)
-        const webviewContext = (window as any).__WEBVIEW_CONTEXT__;
-        console.log('🌐 Webview context from window:', webviewContext);
-        
-        if (webviewContext) {
-            setContext(webviewContext);
-            console.log('✅ Context set:', webviewContext);
-        } else {
-            console.log('⚠️ No webview context found in window');
+        // Get context only for chat view; canvas does not use window context
+        if (viewType !== 'canvas') {
+            const webviewContext = (window as any).__WEBVIEW_CONTEXT__;
+            console.log('🌐 Webview context from window:', webviewContext);
+            if (webviewContext) {
+                setContext(webviewContext);
+                console.log('✅ Context set:', webviewContext);
+            } else {
+                console.log('⚠️ No webview context found in window');
+            }
         }
 
         return () => {

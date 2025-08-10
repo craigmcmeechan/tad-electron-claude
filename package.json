@@ -77,6 +77,12 @@
         "icon": "$(run)"
       },
       {
+        "command": "superdesign.syncBuilder",
+        "title": "Sync Builder (Superdesign)",
+        "category": "Superdesign",
+        "icon": "$(cloud-download)"
+      },
+      {
         "command": "superdesign.configureOpenAIApiKey",
         "title": "Configure OpenAI API Key",
         "category": "Superdesign"
@@ -131,6 +137,11 @@
           "command": "superdesign.buildTemplates",
           "when": "view == superdesign.chatView",
           "group": "navigation@1"
+        },
+        {
+          "command": "superdesign.syncBuilder",
+          "when": "view == superdesign.chatView",
+          "group": "navigation@2"
         },
         {
           "command": "superdesign.openSettings",

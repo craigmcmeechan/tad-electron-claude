@@ -7,6 +7,16 @@ export interface DesignFile {
     size: number;
     modified: Date;
     fileType: 'html' | 'svg';  // File type for proper rendering
+    // Optional tags metadata for organizing frames into logical collections
+    tags?: string[];
+    // Optional directional relationships (from dist manifest)
+    relationships?: {
+        next?: string[];
+        prev?: string[];
+        parent?: string[];
+        children?: string[];
+        related?: string[];
+    };
     // New hierarchy properties
     version?: string;          // e.g., "v1", "v2", "v3"
     parentDesign?: string;     // Reference to parent design file name

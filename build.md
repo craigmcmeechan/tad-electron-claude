@@ -96,6 +96,29 @@ Notes:
 - `path` can be absolute or workspace-relative. If omitted, the Canvas will still display the name but cannot open the file.
 - The extension automatically reads this manifest when viewing the `dist` source and surfaces the data per-frame via a Templates dropdown.
 
+#### Canvas Metadata (for Tags and Collections)
+To organize compiled outputs into logical collections on the Canvas, emit a metadata file at:
+
+`.superdesign/dist/canvas-metadata.json`
+
+Schema (per compiled file path relative to `.superdesign/dist/`):
+
+```json
+{
+  "pages/home.html": {
+    "tags": ["landing", "marketing", "v1"]
+  },
+  "components/card.html": {
+    "tags": ["ui", "card", "atoms"]
+  }
+}
+```
+
+Notes:
+- Keys must match the same relative paths used in the manifest (e.g., `pages/*.html`, `components/*.html`).
+- `tags` is an array of strings; multiple tags are supported per output.
+- The Canvas will render tag badges on each frame when this file is present.
+
 #### Notes
 - Windows shells: the Bash tool uses `cmd.exe /c` under the hood; project watch/build works cross-platform via Node (Claude Code has been removed for Windows support)
 - Ensure VS Code version matches `engines.vscode` in `package.json` (`^1.90.0`)

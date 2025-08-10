@@ -1386,23 +1386,124 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.executeCommand('workbench.action.openSettings', '@ext:iganbold.superdesign');
 	});
 
-	// Register build templates command
-	const buildTemplatesDisposable = vscode.commands.registerCommand('superdesign.buildTemplates', async () => {
+    // Register sync builder command: write packaged builder into working directory
+    const syncBuilderDisposable = vscode.commands.registerCommand('superdesign.syncBuilder', async () => {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('No workspace folder found. Please open a workspace first.');
+            return;
+        }
+
+        const output = Logger.getOutputChannel();
+        output.show(true);
+
+        const bundledDirPrimary = vscode.Uri.joinPath(context.extensionUri, 'dist', 'src', 'assets', 'builder');
+        const bundledDirDev = vscode.Uri.joinPath(context.extensionUri, 'src', 'assets', 'builder');
+
+        const bundledDir = (await (async () => {
+            try { await vscode.workspace.fs.stat(bundledDirPrimary); return bundledDirPrimary; } catch {}
+            try { await vscode.workspace.fs.stat(bundledDirDev); return bundledDirDev; } catch {}
+            return null;
+        })());
+
+        if (!bundledDir) {
+            vscode.window.showErrorMessage('Packaged builder not found in extension assets. Build the extension or ensure assets are included.');
+            return;
+        }
+
+        const destDir = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'builder');
+        try { await vscode.workspace.fs.createDirectory(destDir); } catch {}
+
+        const copyFile = async (name: string) => {
+            const src = vscode.Uri.joinPath(bundledDir, name);
+            try { await vscode.workspace.fs.stat(src); } catch { return; }
+            const buf = await vscode.workspace.fs.readFile(src);
+            await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(destDir, name), buf);
+            output.appendLine(`Synced ${name}`);
+        };
+
+        try {
+            await copyFile('build.js');
+            await copyFile('package.json');
+            vscode.window.showInformationMessage('✅ Synced builder into .superdesign/builder');
+        } catch (e) {
+            Logger.error(`Failed to sync builder: ${e}`);
+            vscode.window.showErrorMessage(`Failed to sync builder: ${e}`);
+        }
+    });
+
+    // Helper: check existence
+    const pathExists = async (uri: vscode.Uri): Promise<boolean> => {
+        try { await vscode.workspace.fs.stat(uri); return true; } catch { return false; }
+    };
+
+    // Helper: copy directory recursively (extension assets -> workspace)
+    const copyDirectory = async (fromDir: vscode.Uri, toDir: vscode.Uri) => {
+        // Ensure destination exists
+        try { await vscode.workspace.fs.createDirectory(toDir); } catch {}
+        const entries = await vscode.workspace.fs.readDirectory(fromDir);
+        for (const [name, type] of entries) {
+            const src = vscode.Uri.joinPath(fromDir, name);
+            const dest = vscode.Uri.joinPath(toDir, name);
+            if (type === vscode.FileType.Directory) {
+                await copyDirectory(src, dest);
+            } else if (type === vscode.FileType.File) {
+                const buf = await vscode.workspace.fs.readFile(src);
+                await vscode.workspace.fs.writeFile(dest, buf);
+            }
+        }
+    };
+
+    // Helper: ensure a builder exists by seeding from bundled assets if missing
+    const ensureWorkspaceBuilder = async (context: vscode.ExtensionContext, workspaceRoot: vscode.Uri, logger: typeof Logger) => {
+        const builderDir = vscode.Uri.joinPath(workspaceRoot, '.superdesign', 'builder');
+        const buildJs = vscode.Uri.joinPath(builderDir, 'build.js');
+        if (await pathExists(buildJs)) {
+            return { builderDir, buildJs, seeded: false } as const;
+        }
+
+        // Try to seed from embedded assets shipped with the extension
+        // Assets are copied to dist/src/assets by our build, so look there first
+        const embeddedBuilderDir1 = vscode.Uri.joinPath(context.extensionUri, 'dist', 'src', 'assets', 'builder');
+        const embeddedBuilderDir2 = vscode.Uri.joinPath(context.extensionUri, 'src', 'assets', 'builder'); // dev fallback
+        const embeddedDir = (await pathExists(embeddedBuilderDir1)) ? embeddedBuilderDir1 : embeddedBuilderDir2;
+        const embeddedBuildJs = vscode.Uri.joinPath(embeddedDir, 'build.js');
+
+        if (!(await pathExists(embeddedBuildJs))) {
+            // No embedded builder available
+            return null;
+        }
+
+        // Create workspace builder and copy files
+        try {
+            await vscode.workspace.fs.createDirectory(builderDir);
+        } catch {}
+        try {
+            await copyDirectory(embeddedDir, builderDir);
+            logger.info('Seeded .superdesign/builder from bundled Superdesign assets');
+        } catch (e) {
+            logger.error(`Failed to seed workspace builder: ${e}`);
+            return null;
+        }
+
+        return { builderDir, buildJs: vscode.Uri.joinPath(builderDir, 'build.js'), seeded: true } as const;
+    };
+
+    // Register build templates command
+    const buildTemplatesDisposable = vscode.commands.registerCommand('superdesign.buildTemplates', async () => {
 		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 		if (!workspaceFolder) {
 			vscode.window.showErrorMessage('No workspace folder found. Please open a workspace first.');
 			return;
 		}
 
-		const builderDir = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'builder');
-		const buildJs = vscode.Uri.joinPath(builderDir, 'build.js');
-
-		try {
-			await vscode.workspace.fs.stat(buildJs);
-		} catch {
-			vscode.window.showErrorMessage(`Could not find .superdesign/builder/build.js at ${buildJs.fsPath}`);
-			return;
-		}
+        // Ensure a usable builder exists (workspace or bundled)
+        const ensured = await ensureWorkspaceBuilder(context, workspaceFolder.uri, Logger);
+        if (!ensured) {
+            vscode.window.showErrorMessage('No builder found. Please add your builder to .superdesign/builder or update the extension to include a bundled builder.');
+            return;
+        }
+        const { builderDir, buildJs } = ensured;
 
 		const output = Logger.getOutputChannel();
 		output.show(true);
@@ -1413,7 +1514,7 @@ export function activate(context: vscode.ExtensionContext) {
 			location: vscode.ProgressLocation.Notification,
 			cancellable: false
 		}, async () => {
-			const builderFsPath = builderDir.fsPath;
+            const builderFsPath = builderDir.fsPath;
 
 			// Detect package manager based on lockfiles
 			const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -1458,7 +1559,7 @@ export function activate(context: vscode.ExtensionContext) {
 				}
 			}
 
-			// Prefer npm/pnpm/yarn script if exists, otherwise run node build.js
+            // Prefer npm/pnpm/yarn script if exists, otherwise run node build.js
 			let ran = false;
 			if (hasPkgJson) {
 				try {
@@ -1472,7 +1573,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 			if (!ran) {
 				Logger.info('Running builder via Node (current extension host)');
-				const child = execaNode('build.js', { cwd: builderFsPath });
+                const child = execaNode('build.js', { cwd: builderFsPath });
 				child.stdout?.on('data', (d: Buffer) => output.append(d.toString()));
 				child.stderr?.on('data', (d: Buffer) => output.append(d.toString()));
 				await child;
@@ -1576,6 +1677,7 @@ export function activate(context: vscode.ExtensionContext) {
 		initializeProjectDisposable,
 		openSettingsDisposable,
 		buildTemplatesDisposable,
+		syncBuilderDisposable,
 		openTemplateViewDisposable,
 		configureApiKeyQuickDisposable
 	);
@@ -1921,7 +2023,7 @@ class SuperdesignCanvasPanel {
 			<html lang="en">
 			<head>
 				<meta charset="UTF-8">
-				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data: https: vscode-webview:; script-src 'nonce-${nonce}'; frame-src ${webview.cspSource};">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data: https: vscode-webview:; font-src ${webview.cspSource} data:; script-src 'nonce-${nonce}'; frame-src ${webview.cspSource} data: blob: https: http: vscode-webview:; child-src ${webview.cspSource} data: blob: https: http: vscode-webview:;">
 				<meta name="viewport" content="width=device-width, initial-scale=1.0">
 				<title>Superdesign Canvas</title>
 			</head>
@@ -1937,6 +2039,47 @@ class SuperdesignCanvasPanel {
 						extensionUri: '${this._extensionUri.toString()}',
 						logoUris: ${JSON.stringify(logoUris)}
 					};
+
+					// Early global error handlers to capture canvas startup issues
+					(function installCanvasErrorHandlers(){
+						try {
+							// Use a single shared VS Code API instance if available
+							const vs = (window as any).__vscodeApi || ((typeof acquireVsCodeApi === 'function') ? acquireVsCodeApi() : null);
+							if (vs && !(window as any).__vscodeApi) { (window as any).__vscodeApi = vs; }
+							window.addEventListener('error', function(e){
+								try {
+									console.error('Canvas global error:', e.error || e.message, e.filename, e.lineno, e.colno);
+									vs?.postMessage({
+										command: 'canvasError',
+										data: {
+											type: 'error',
+											message: e.message || String(e.error || 'Unknown error'),
+											stack: e.error && e.error.stack ? e.error.stack : null,
+											filename: e.filename,
+											lineno: e.lineno,
+											colno: e.colno
+										}
+									});
+								} catch(ie){ console.error('Failed to report canvas error:', ie); }
+							});
+							window.addEventListener('unhandledrejection', function(e){
+								try {
+									console.error('Canvas unhandledrejection:', e.reason);
+									vs?.postMessage({
+										command: 'canvasError',
+										data: {
+											type: 'unhandledrejection',
+											message: String(e.reason && e.reason.message ? e.reason.message : e.reason),
+											stack: e.reason && e.reason.stack ? e.reason.stack : null
+										}
+									});
+								} catch(ie){ console.error('Failed to report canvas rejection:', ie); }
+							});
+							console.log('Canvas Panel - Global error handlers installed.');
+						} catch (gerr) {
+							console.error('Canvas Panel - Failed to install global error handlers:', gerr);
+						}
+					})();
 					
 					// Debug logging in webview
 					console.log('Canvas Panel - Webview context set:', window.__WEBVIEW_CONTEXT__);
@@ -1983,7 +2126,7 @@ class SuperdesignCanvasPanel {
 		}
 	}
 
-		private async _loadDesignFiles(options?: { source?: 'design_iterations' | 'dist'; kind?: 'pages' | 'components' }) {
+        private async _loadDesignFiles(options?: { source?: 'design_iterations' | 'dist'; kind?: 'pages' | 'components' | 'groups' }) {
 		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 		if (!workspaceFolder) {
 			this._panel.webview.postMessage({
@@ -2006,27 +2149,41 @@ class SuperdesignCanvasPanel {
             }
 			
             // Check if the target folder exists
-            try {
-                await vscode.workspace.fs.stat(designFolder);
-            } catch (error) {
-                if (source === 'dist') {
-                    // Don't create dist folders; instruct user to build
+            if (options?.kind === 'groups' && source === 'dist') {
+                // For groups, ensure at least base dist exists; we will read from both pages and components
+                const baseDist = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist');
+                try {
+                    await vscode.workspace.fs.stat(baseDist);
+                } catch (error) {
                     this._panel.webview.postMessage({
                         command: 'error',
-                        data: { error: `No build output found at ${designFolder.fsPath}. Run npm install && npm run build inside .superdesign/builder, then reload the canvas.` }
+                        data: { error: `No build output found at ${baseDist.fsPath}. Use the "Build Templates (Superdesign)" command to generate build output (this will auto-seed a builder if bundled).` }
                     });
                     return;
-                } else {
-                    // For design_iterations, create it if missing
-                    try {
-                        await vscode.workspace.fs.createDirectory(designFolder);
-                        Logger.info('Created .superdesign/design_iterations directory');
-                    } catch (createError) {
+                }
+            } else {
+                try {
+                    await vscode.workspace.fs.stat(designFolder);
+                } catch (error) {
+                    if (source === 'dist') {
+                        // Don't create dist folders; instruct user to build
                         this._panel.webview.postMessage({
                             command: 'error',
-                            data: { error: `Failed to create design files directory: ${createError}` }
+                            data: { error: `No build output found at ${designFolder.fsPath}. Use the "Build Templates (Superdesign)" command to generate build output (this will auto-seed a builder if bundled).` }
                         });
                         return;
+                    } else {
+                        // For design_iterations, create it if missing
+                        try {
+                            await vscode.workspace.fs.createDirectory(designFolder);
+                            Logger.info('Created .superdesign/design_iterations directory');
+                        } catch (createError) {
+                            this._panel.webview.postMessage({
+                                command: 'error',
+                                data: { error: `Failed to create design files directory: ${createError}` }
+                            });
+                            return;
+                        }
                     }
                 }
             }
@@ -2050,19 +2207,43 @@ class SuperdesignCanvasPanel {
                 return results;
             }
 
-				const fileUrisWithNames = await readAllFiles(designFolder);
+                let fileUrisWithNames: Array<[vscode.Uri, string]> = [];
+                if (options?.kind === 'groups' && source === 'dist') {
+                    // Read from both pages and components
+                    const base = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist');
+                    const pagesDir = vscode.Uri.joinPath(base, 'pages');
+                    const componentsDir = vscode.Uri.joinPath(base, 'components');
+                    try {
+                        const p = await readAllFiles(pagesDir);
+                        fileUrisWithNames.push(...p);
+                    } catch {}
+                    try {
+                        const c = await readAllFiles(componentsDir);
+                        fileUrisWithNames.push(...c);
+                    } catch {}
+                } else {
+                    fileUrisWithNames = await readAllFiles(designFolder);
+                }
 
-				// Try to read build manifest if source is dist
-				let manifest: any | null = null;
-				if (source === 'dist') {
-					try {
-						const manifestUri = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist', 'manifest.json');
-						const buf = await vscode.workspace.fs.readFile(manifestUri);
-						manifest = JSON.parse(Buffer.from(buf).toString('utf8'));
-					} catch (e) {
-						Logger.warn('No manifest.json found under .superdesign/dist; template metadata will be unavailable');
-					}
-				}
+                // Try to read build manifest (templates mapping) and canvas metadata (tags) if source is dist
+                let manifest: any | null = null;
+                let canvasMetadata: any | null = null;
+                if (source === 'dist') {
+                    try {
+                        const manifestUri = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist', 'manifest.json');
+                        const buf = await vscode.workspace.fs.readFile(manifestUri);
+                        manifest = JSON.parse(Buffer.from(buf).toString('utf8'));
+                    } catch (e) {
+                        Logger.warn('No manifest.json found under .superdesign/dist; template metadata will be unavailable');
+                    }
+                    try {
+                        const metaUri = vscode.Uri.joinPath(workspaceFolder.uri, '.superdesign', 'dist', 'canvas-metadata.json');
+                        const buf = await vscode.workspace.fs.readFile(metaUri);
+                        canvasMetadata = JSON.parse(Buffer.from(buf).toString('utf8'));
+                    } catch (e) {
+                        Logger.warn('No canvas-metadata.json found under .superdesign/dist; tags metadata will be unavailable');
+                    }
+                }
 
             // Determine base for relative display names
             const namingBase = (source === 'dist')
@@ -2094,30 +2275,76 @@ class SuperdesignCanvasPanel {
                             .split(path.sep)
                             .join('/');
 
-							// Attach templates from manifest if present
+                            // Attach templates from manifest if present
 							let templates: any | undefined = undefined;
+                            let collectedTags: string[] = [];
 							if (manifest && source === 'dist') {
 								try {
-									// Expect manifest to be keyed by relativeName (e.g., pages/home.html)
-									const entry = manifest[relativeName];
+                                    // Expect manifest to be keyed by relativeName (e.g., pages/home.html)
+                                    const entry = manifest[relativeName];
 									if (entry && typeof entry === 'object') {
-										const page = entry.page ? { name: String(entry.page.name || entry.page), path: entry.page.path } : null;
-										const components = Array.isArray(entry.components) ? entry.components.map((c: any) => ({ name: String(c.name || c), path: c.path })) : [];
-										const elements = Array.isArray(entry.elements) ? entry.elements.map((el: any) => ({ name: String(el.name || el), path: el.path })) : [];
-										templates = { page, components, elements };
+                                        // Optional top-level tags on manifest entry
+                                        if (Array.isArray(entry.tags)) {
+                                            collectedTags = entry.tags.map((t: any) => String(t)).filter((t: string) => t.trim().length > 0);
+                                        }
+                                        const page = entry.page ? { name: String(entry.page.name || entry.page), path: entry.page.path } : null;
+                                        const components = Array.isArray(entry.components) ? entry.components.map((c: any) => ({ name: String(c.name || c), path: c.path })) : [];
+                                        const elements = Array.isArray(entry.elements) ? entry.elements.map((el: any) => ({ name: String(el.name || el), path: el.path })) : [];
+                                        templates = { page, components, elements };
+                                        // Pick up relationships if present in manifest
+                                        let relationships: any | undefined = undefined;
+                                        if (entry.relationships && typeof entry.relationships === 'object') {
+                                            relationships = {
+                                                next: Array.isArray(entry.relationships.next) ? entry.relationships.next.slice() : undefined,
+                                                prev: Array.isArray(entry.relationships.prev) ? entry.relationships.prev.slice() : undefined,
+                                                parent: Array.isArray(entry.relationships.parent) ? entry.relationships.parent.slice() : undefined,
+                                                children: Array.isArray(entry.relationships.children) ? entry.relationships.children.slice() : undefined,
+                                                related: Array.isArray(entry.relationships.related) ? entry.relationships.related.slice() : undefined,
+                                            };
+                                        }
+                                        (templates as any)._relationships = relationships; // temp attach; mapped below
 									}
 								} catch {}
 							}
 
-							return {
+                            // Attach tags from canvas-metadata if present
+                            let tags: string[] | undefined = undefined;
+                            if (canvasMetadata && source === 'dist') {
+                                try {
+                                    const metaEntry = canvasMetadata[relativeName];
+                                    if (metaEntry && Array.isArray(metaEntry.tags)) {
+                                        const extra = metaEntry.tags.map((t: any) => String(t)).filter((t: string) => t.trim().length > 0);
+                                        collectedTags = collectedTags.concat(extra);
+                                    }
+                                } catch {}
+                            }
+
+                            if (collectedTags.length > 0) {
+                                // Dedupe while preserving order
+                                const seen = new Set<string>();
+                                tags = collectedTags.filter((t) => {
+                                    if (seen.has(t)) return false;
+                                    seen.add(t);
+                                    return true;
+                                });
+                            }
+
+                            const base: any = {
                             name: relativeName || fileName,
 							path: filePath.fsPath,
 							content: htmlContent,
 							size: stat.size,
 							modified: new Date(stat.mtime),
-								fileType,
-								templates
-						};
+                                fileType,
+                                templates,
+                                tags
+                            };
+                            // Lift relationships to top-level field for Canvas
+                            if ((templates as any)?._relationships) {
+                                base.relationships = (templates as any)._relationships;
+                                delete (templates as any)._relationships;
+                            }
+                            return base;
 					} catch (fileError) {
 						Logger.error(`Failed to read file ${fileName}: ${fileError}`);
 						return null;

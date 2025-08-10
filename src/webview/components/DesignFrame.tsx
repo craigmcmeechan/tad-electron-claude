@@ -52,6 +52,7 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
     const [hasError, setHasError] = React.useState(false);
     const [dragPreventOverlay, setDragPreventOverlay] = React.useState(false);
     const [showCopyDropdown, setShowCopyDropdown] = React.useState(false);
+    const [showNextDropdown, setShowNextDropdown] = React.useState(false);
     const [copyButtonState, setCopyButtonState] = React.useState<{ text: string; isSuccess: boolean }>({ text: 'Copy prompt', isSuccess: false });
     const [copyPathButtonState, setCopyPathButtonState] = React.useState<{ text: string; isSuccess: boolean }>({ text: 'Copy design path', isSuccess: false });
 
@@ -86,25 +87,24 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
         }
     }, [isDragging]);
 
-    // Close dropdown when clicking outside
+    // Close dropdowns when clicking outside
     React.useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as Element;
             if (showCopyDropdown) {
-                const target = event.target as Element;
-                const dropdownElement = target.closest('.copy-prompt-dropdown');
-                if (!dropdownElement) {
-                    setShowCopyDropdown(false);
-                }
+                const el = target.closest('.copy-prompt-dropdown');
+                if (!el) setShowCopyDropdown(false);
+            }
+            if (showNextDropdown) {
+                const el = target.closest('.next-rel-dropdown');
+                if (!el) setShowNextDropdown(false);
             }
         };
-
-        if (showCopyDropdown) {
+        if (showCopyDropdown || showNextDropdown) {
             document.addEventListener('mousedown', handleClickOutside);
-            return () => {
-                document.removeEventListener('mousedown', handleClickOutside);
-            };
+            return () => document.removeEventListener('mousedown', handleClickOutside);
         }
-    }, [showCopyDropdown]);
+    }, [showCopyDropdown, showNextDropdown]);
 
     const handleViewportToggle = (newViewport: ViewportMode) => {
         if (onViewportChange && !useGlobalViewport) {
@@ -530,6 +530,14 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
             </div>
             <div className="frame-content">
                 {renderContent()}
+                {/* Tags badges */}
+                {Array.isArray(file.tags) && file.tags.length > 0 && (
+                    <div className="frame-tags" onClick={(e) => e.stopPropagation()}>
+                        {file.tags.map((tag, idx) => (
+                            <span key={`tag-${idx}-${tag}`} className="frame-tag-badge">{tag}</span>
+                        ))}
+                    </div>
+                )}
                 {/* Templates dropdown (if template metadata exists) */}
                 {file.templates && (file.templates.page || (file.templates.components && file.templates.components.length) || (file.templates.elements && file.templates.elements.length)) && (
                     <div className="frame-templates">
@@ -585,6 +593,30 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                         </details>
                     </div>
                 )}
+                {/* Relationships dropdown (next) */}
+                {Array.isArray(file.relationships?.next) && file.relationships!.next!.length > 0 && (
+                    <div className="frame-relationships">
+                        <details>
+                            <summary>Next</summary>
+                            <div className="relationships-list">
+                                {file.relationships!.next!.map((rel, idx) => (
+                                    <button
+                                        key={`rel-next-${idx}-${rel}`}
+                                        className="relationship-link"
+                                        title={rel}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            // Ask Canvas to focus on the related frame
+                                            window.postMessage({ __canvasNavigateTo__: rel }, '*');
+                                        }}
+                                    >
+                                        {rel}
+                                    </button>
+                                ))}
+                            </div>
+                        </details>
+                    </div>
+                )}
                 
                 {/* Drag prevention overlay - prevents iframe interaction during drag */}
                 {(dragPreventOverlay || isDragging) && isSelected && renderMode === 'iframe' && (
@@ -628,6 +660,50 @@ const DesignFrame: React.FC<DesignFrameProps> = ({
                     onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()}
                 >
+                    {/* Next relationships quick action */}
+                    {Array.isArray(file.relationships?.next) && file.relationships!.next!.length > 0 && (
+                        <div className="next-rel-dropdown">
+                            <button
+                                className="floating-action-btn"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const nexts = file.relationships!.next!;
+                                    if (nexts.length === 1) {
+                                        window.postMessage({ __canvasNavigateTo__: nexts[0] }, '*');
+                                    } else {
+                                        setShowNextDropdown(!showNextDropdown);
+                                    }
+                                }}
+                                title="Navigate to next related page"
+                            >
+                                <svg className="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M5 12h14"/>
+                                    <path d="M13 5l7 7-7 7"/>
+                                </svg>
+                                <span className="btn-text">Next ({file.relationships!.next!.length})</span>
+                            </button>
+                            {showNextDropdown && file.relationships!.next!.length > 1 && (
+                                <div className="copy-dropdown-menu" style={{ minWidth: 220 }}>
+                                    {file.relationships!.next!.map((rel, idx) => (
+                                        <button
+                                            key={`next-dd-${idx}-${rel}`}
+                                            className="copy-dropdown-item"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                window.postMessage({ __canvasNavigateTo__: rel }, '*');
+                                                setShowNextDropdown(false);
+                                            }}
+                                            title={rel}
+                                        >
+                                            <span>{rel}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
                     <button
                         className="floating-action-btn"
                         onClick={handleCreateVariations}

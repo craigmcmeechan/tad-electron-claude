@@ -1,0 +1,24 @@
+{
+  "autorun": true,
+  "terminals": [
+    {
+      "name": "coder",
+      "description": "coding tools",
+      "focus": true,
+      "commands": ["zsh", "source ../coder_keys.sh"],
+      "shellPath": "bash"
+    },
+    {
+      "name": "shell",
+      "description": "shell tools",
+      "commands": ["zsh", "source ../coder_keys.sh"],
+      "shellPath": "bash"
+    },
+    {
+      "name": "git",
+      "description": "git tools",
+      "commands": ["git status"],
+      "shellPath": "pwsh"
+    }
+  ]
+}

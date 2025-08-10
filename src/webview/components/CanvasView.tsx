@@ -87,7 +87,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         offset: { x: 0, y: 0 }
     });
     const [layoutMode, setLayoutMode] = useState<LayoutMode>('grid');
-    const [distMode, setDistMode] = useState<'pages' | 'components'>(() => {
+    const [distMode, setDistMode] = useState<'pages' | 'components' | 'groups'>(() => {
         try {
             const saved = vscode?.getState?.() || {};
             return saved?.canvasDistMode || 'pages';
@@ -190,6 +190,24 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
 
     if (DEBUG) console.log('✅ CanvasView state initialized successfully');
     
+    // Memoized connections (must be declared at top level; hooks cannot be inside conditionals)
+    const hierarchyConnections: ConnectionLine[] = useMemo(() => {
+        if (!hierarchyTree) return [];
+        try {
+            return updateConnectionPositions(hierarchyTree.connections, designFiles);
+        } catch {
+            return [];
+        }
+    }, [hierarchyTree, designFiles, customPositions, frameViewports, useGlobalViewport, currentConfig, layoutMode]);
+
+    const nextConnections: ConnectionLine[] = useMemo(() => {
+        try {
+            return buildNextRelationshipConnections();
+        } catch {
+            return [];
+        }
+    }, [designFiles, customPositions, frameViewports, useGlobalViewport, currentConfig, layoutMode]);
+
     // Performance optimization: Switch render modes based on zoom level
     const LOD_IFRAME_THRESHOLD = 0.35; // below this, render placeholders
     const getOptimalRenderMode = (zoom: number): 'placeholder' | 'iframe' => {
@@ -461,7 +479,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         };
         vscode.postMessage(loadMessage);
 
-        // Listen for messages from extension
+        // Listen for messages from extension and internal navigation requests
         const messageHandler = (event: MessageEvent) => {
             const message: ExtensionToWebviewMessage = event.data;
             
@@ -574,6 +592,20 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         };
 
         window.addEventListener('message', messageHandler);
+        // Internal navigation bridge from DesignFrame
+        const navHandler = (event: MessageEvent) => {
+            const data: any = event.data;
+            if (data && typeof data === 'object' && data.__canvasNavigateTo__) {
+                const targetName = String(data.__canvasNavigateTo__);
+                // Ensure the target exists in current files, then focus
+                const exists = designFiles.some(f => f.name === targetName);
+                if (exists) {
+                    setSelectedFrames([targetName]);
+                    focusOnFrame(targetName);
+                }
+            }
+        };
+        window.addEventListener('message', navHandler);
         return () => window.removeEventListener('message', messageHandler);
     }, [vscode]); // Removed currentConfig dependency to prevent constant re-renders
 
@@ -946,6 +978,31 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
         });
     };
 
+    // Build directional connection lines from manifest relationships (next only)
+    const buildNextRelationshipConnections = (): ConnectionLine[] => {
+        const conns: ConnectionLine[] = [];
+        // Only consider pages relationships
+        const pageFiles = designFiles.filter(f => f.name.startsWith('pages/'));
+        const mapByName = new Map(pageFiles.map(f => [f.name, f] as const));
+        for (const file of pageFiles) {
+            const nexts = file.relationships?.next || [];
+            for (const target of nexts) {
+                const toFile = mapByName.get(target);
+                if (!toFile) continue;
+                conns.push({
+                    id: `next:${file.name}->${toFile.name}`,
+                    fromFrame: file.name,
+                    toFrame: toFile.name,
+                    fromPosition: { x: 0, y: 0 },
+                    toPosition: { x: 0, y: 0 },
+                    color: 'var(--vscode-textLink-foreground)',
+                    width: 2
+                });
+            }
+        }
+        return updateConnectionPositions(conns, designFiles);
+    };
+
     // Keyboard shortcuts for zoom
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -1019,7 +1076,7 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                             ref={searchInputRef}
                             type="text"
                             className="canvas-search-input"
-                            placeholder={`Search ${distMode === 'pages' ? 'pages' : 'components'}...`}
+                            placeholder={`Search ${distMode === 'pages' ? 'pages' : distMode === 'components' ? 'components' : 'groups'}...`}
                             value={searchQuery}
                             onChange={(e) => {
                                 setSearchQuery(e.target.value);
@@ -1140,6 +1197,13 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                                 title="Show built Components (.superdesign/dist/components)"
                             >
                                 Components
+                            </button>
+                            <button
+                                className={`toggle-btn ${distMode === 'groups' ? 'active' : ''}`}
+                                onClick={() => setDistMode('groups')}
+                                title="Show tag Groups (from manifest/canvas-metadata tags)"
+                            >
+                                Groups
                             </button>
                         </div>
                     </div>
@@ -1343,13 +1407,104 @@ const CanvasView: React.FC<CanvasViewProps> = ({ vscode, nonce }) => {
                         {/* Connection Lines (render behind frames) */}
                         {layoutMode === 'hierarchy' && hierarchyTree && showConnections && (
                             <ConnectionLines
-                                connections={useMemo(() => updateConnectionPositions(hierarchyTree.connections, designFiles), [hierarchyTree.connections, designFiles, customPositions, frameViewports, useGlobalViewport, currentConfig, layoutMode])}
+                                connections={hierarchyConnections}
                                 containerBounds={hierarchyTree.bounds}
                                 isVisible={showConnections}
                                 zoomLevel={currentZoom}
                             />
                         )}
-                        {designFiles.map((file, index) => {
+                        {/* Next-relationship arrows (rendered when viewing pages) */}
+                        {distMode === 'pages' && (
+                            <ConnectionLines
+                                connections={nextConnections}
+                                containerBounds={{ width: 10000, height: 10000 }}
+                                isVisible={true}
+                                zoomLevel={currentZoom}
+                            />
+                        )}
+                        {(distMode !== 'groups' ? designFiles : (() => {
+                            // Build groups from tags (union of pages/components)
+                            const groups: { [tag: string]: DesignFile[] } = {};
+                            for (const f of designFiles) {
+                                const tagList = Array.isArray(f.tags) ? f.tags : [];
+                                for (const t of tagList) {
+                                    if (!groups[t]) groups[t] = [];
+                                    groups[t].push(f);
+                                }
+                            }
+                            // Flatten to an array with labeled group header items
+                            const flattened: Array<{ _kind: 'group' | 'file'; _tag?: string; _file?: DesignFile }> = [];
+                            const sortedTags = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+                            for (const tag of sortedTags) {
+                                flattened.push({ _kind: 'group', _tag: tag });
+                                for (const f of groups[tag]) flattened.push({ _kind: 'file', _file: f, _tag: tag });
+                            }
+                            // Map to pseudo design files with injected positions later
+                            // We'll render headers as special frames
+                            return flattened;
+                        })()).map((item, index) => {
+                            if (distMode === 'groups') {
+                                const g = item as any;
+                                if (g._kind === 'group') {
+                                    // Render group label as a sticky header frame placeholder
+                                    const position = getFramePosition(`__group__${g._tag}`, index);
+                                    const dims = { width: 300, height: 40 };
+                                    return (
+                                        <div
+                                            key={`group-${g._tag}-${index}`}
+                                            className="group-label"
+                                            style={{ position: 'absolute', left: position.x, top: position.y, width: dims.width, height: dims.height }}
+                                        >
+                                            <div className="group-label-badge">Group: {g._tag}</div>
+                                        </div>
+                                    );
+                                }
+                                // File within a group
+                                const file = (g._file as DesignFile);
+                                const isForced = forceRenderFrame === file.name;
+                                const frameViewport = getFrameViewport(file.name);
+                                const viewportDimensions = currentConfig.viewports[frameViewport];
+                                const actualWidth = viewportDimensions.width;
+                                const actualHeight = viewportDimensions.height + 50;
+                                const position = getFramePosition(`${file.name}__${g._tag}`, index);
+                                const finalPosition = position;
+                                const frameLeft = finalPosition.x;
+                                const frameTop = finalPosition.y;
+                                const frameRight = frameLeft + actualWidth;
+                                const frameBottom = frameTop + actualHeight;
+                                const isInView = frameRight >= visibleBounds.left && frameLeft <= visibleBounds.right && frameBottom >= visibleBounds.top && frameTop <= visibleBounds.bottom;
+                                const computedRenderMode = isTransformReady ? getOptimalRenderMode(currentZoom) : 'placeholder';
+                                if (!isInView && computedRenderMode !== 'placeholder' && !isForced) return null;
+                                return (
+                                    <DesignFrame
+                                        key={`${file.name}::${g._tag}`}
+                                        file={file}
+                                        position={finalPosition}
+                                        dimensions={{ width: actualWidth, height: actualHeight }}
+                                        isSelected={selectedFrames.includes(file.name)}
+                                        onSelect={handleFrameSelect}
+                                        renderMode={isInView ? computedRenderMode : 'placeholder'}
+                                        viewport={frameViewport}
+                                        viewportDimensions={viewportDimensions}
+                                        onViewportChange={handleFrameViewportChange}
+                                        useGlobalViewport={useGlobalViewport}
+                                        onDragStart={handleDragStart}
+                                        isDragging={dragState.isDragging && dragState.draggedFrame === file.name}
+                                        nonce={nonce}
+                                        onSendToChat={handleSendToChat}
+                                        vscode={vscode}
+                                        onRefresh={(filePath) => {
+                                            const msg: WebviewMessage = {
+                                                command: 'reloadDesignFile',
+                                                data: { filePath }
+                                            } as any;
+                                            vscode.postMessage(msg);
+                                        }}
+                                    />
+                                );
+                            }
+                            // Default pages/components rendering
+                            const file = item as any as DesignFile;
                             const isForced = forceRenderFrame === file.name;
                             const frameViewport = getFrameViewport(file.name);
                             const viewportDimensions = currentConfig.viewports[frameViewport];
