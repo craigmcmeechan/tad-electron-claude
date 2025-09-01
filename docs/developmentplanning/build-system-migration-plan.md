@@ -406,7 +406,7 @@ class BuildManager {
     const { spawn } = require('child_process');
 
     return new Promise((resolve, reject) => {
-      const installProcess = spawn('npm', ['install', '--production'], {
+      const installProcess = spawn('pnpm', ['install', '--prod'], {
         cwd: builderDir,
         stdio: 'inherit'
       });

@@ -39,9 +39,9 @@ Phase 1 establishes the foundational infrastructure for the TAD Electron migrati
 - [ ] `README.md` with setup instructions
 
 #### Success Criteria:
-- [ ] `npm install` completes without errors
-- [ ] `npm run build` produces working bundles
-- [ ] `npm run dev` starts development server with hot-reload
+- [ ] `pnpm install` completes without errors
+- [ ] `pnpm run build` produces working bundles
+- [ ] `pnpm run dev` starts development server with hot-reload
 - [ ] All team members can clone and run the project locally
 
 #### Technical Details:
