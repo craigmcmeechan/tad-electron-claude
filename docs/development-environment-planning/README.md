@@ -31,13 +31,19 @@ This directory contains planning documents for establishing a robust development
 - Platform-specific build configurations
 - Testing across multiple operating systems
 
+### 5. **Electron GUI Development Constraints**
+- **Container Limitations**: Electron GUI applications cannot run directly in dev containers
+- **Display Server Requirements**: Built executables must run on host system
+- **Hybrid Development Needs**: Balance between containerized development and local execution
+- **Debugging Complexity**: Remote debugging requirements for GUI applications
+
 ## Proposed Solutions
 
-### **Enhanced Monorepo Architecture: Microsoft Rush + GitHub Workspaces**
+### **Enhanced Monorepo Architecture: Microsoft Rush + GitHub Workspaces + Hybrid Electron Development**
 
-Given the complexity of the TAD migration and the need for parallel development across multiple teams, I recommend establishing an enhanced monorepo architecture combining **Microsoft Rush** with **GitHub Workspaces**. This approach provides several key benefits:
+Given the complexity of the TAD migration and the need for parallel development across multiple teams, I recommend establishing an enhanced monorepo architecture combining **Microsoft Rush** with **GitHub Workspaces** and a **hybrid Electron development workflow**. This approach addresses both the technical complexity of the monorepo and the unique challenges of Electron GUI application development:
 
-#### **Benefits of Enhanced Rush + GitHub Workspaces**
+#### **Benefits of Enhanced Rush + GitHub Workspaces + Hybrid Electron Development**
 1. **Scalable Build System**: Rush's phased build system handles complex dependency chains efficiently
 2. **Parallel Development**: Multiple teams can work on different packages simultaneously
 3. **Consistent Tooling**: Standardized build, test, and lint scripts across all packages
@@ -48,6 +54,8 @@ Given the complexity of the TAD migration and the need for parallel development 
 8. **Rapid Onboarding**: New developers can start coding in minutes, not hours
 9. **Cross-Platform Consistency**: Identical experience across Windows, macOS, and Linux
 10. **Enhanced Collaboration**: Real-time collaborative coding and debugging
+11. **Hybrid Electron Workflow**: Optimal balance between containerized development and local GUI testing
+12. **Electron-Specific Optimization**: Purpose-built configurations for Electron application development
 
 #### **Proposed Package Structure**
 ```
@@ -206,13 +214,14 @@ tad-monorepo/
 
 ## Enhanced Recommendation
 
-Given the complexity of the LSP server implementation, the need for parallel development across multiple teams, and the cross-platform build requirements, I strongly recommend proceeding with the **enhanced Microsoft Rush monorepo + GitHub Workspaces** approach. This combination provides:
+Given the complexity of the LSP server implementation, the need for parallel development across multiple teams, the cross-platform build requirements, and the unique challenges of Electron GUI application development, I strongly recommend proceeding with the **enhanced Microsoft Rush monorepo + GitHub Workspaces + Hybrid Electron Development** approach. This combination provides:
 
 ### **Why This Enhanced Approach?**
 
 #### **Technical Excellence**
 - **Rush Monorepo**: Handles complex dependency chains and parallel development
 - **GitHub Workspaces**: Provides consistent, cloud-based development environments
+- **Hybrid Electron Workflow**: Optimal development strategy for GUI applications
 - **Scalable Architecture**: Supports 50+ developers working simultaneously
 - **Performance Optimized**: Incremental builds and intelligent caching
 
@@ -221,12 +230,36 @@ Given the complexity of the LSP server implementation, the need for parallel dev
 - **Environment Consistency**: Identical setup across the entire team
 - **Cross-Platform**: Seamless experience on Windows, macOS, and Linux
 - **Enhanced Collaboration**: Real-time collaborative coding and debugging
+- **Electron-Optimized**: Purpose-built workflow for Electron application development
 
 #### **Business Value**
 - **20-30% Productivity Improvement**: Through faster onboarding and consistent tooling
 - **Reduced Time-to-Market**: Parallel development and optimized workflows
 - **Cost Efficiency**: Cloud-based development with pay-per-use model
 - **Risk Mitigation**: Consistent environments eliminate "works on my machine" issues
+- **Electron Compatibility**: Proper handling of GUI application development constraints
+
+### **Electron Development Strategy**
+
+#### **95/5 Development Model**
+- **95% Container Development**: Code development, unit testing, component development
+- **5% Local Testing**: GUI testing, performance profiling, final integration testing
+
+#### **When to Use Containers (95% of time)**
+- ✅ Renderer process development (React/TypeScript)
+- ✅ Main process business logic
+- ✅ Unit testing and component testing
+- ✅ Build system development
+- ✅ Code reviews and collaboration
+- ✅ CI/CD pipeline development
+
+#### **When to Use Local Development (5% of time)**
+- ✅ Full GUI application testing
+- ✅ User interaction testing
+- ✅ Performance profiling
+- ✅ Platform-specific packaging
+- ✅ Distribution testing
+- ✅ Native system integration testing
 
 ### **Expected Outcomes**
 - **95% reduction** in development environment setup time
@@ -234,5 +267,6 @@ Given the complexity of the LSP server implementation, the need for parallel dev
 - **25% improvement** in development velocity
 - **Seamless cross-platform development** experience
 - **Enhanced team collaboration** through shared workspaces
+- **Optimal Electron development workflow** balancing productivity and testing requirements
 
-The enhanced monorepo approach will provide the foundation needed to successfully migrate TAD to Electron while establishing a world-class development environment that supports the project's long-term growth and success.
+The enhanced monorepo approach with hybrid Electron development will provide the foundation needed to successfully migrate TAD to Electron while establishing a world-class development environment that properly handles the unique requirements of GUI application development.

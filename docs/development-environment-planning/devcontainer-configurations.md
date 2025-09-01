@@ -4,6 +4,31 @@
 
 This document provides the complete dev container configurations for integrating GitHub Workspaces with the Rush monorepo. These configurations ensure consistent development environments across the team.
 
+## ⚠️ Important: Electron Development Considerations
+
+### **Electron GUI Applications and Dev Containers**
+
+**Key Limitation**: Electron GUI applications cannot run directly inside dev containers due to display server requirements. The built Electron executable must run on the host system, while development of the renderer process can occur inside containers.
+
+#### **Recommended Hybrid Approach**
+1. **Renderer Process Development**: Use dev containers for React/TypeScript development
+2. **Main Process Development**: Use dev containers for Node.js/Electron main process code
+3. **Application Execution**: Run the built Electron app on the host system
+4. **Debugging**: Use remote debugging with port forwarding
+
+#### **When to Use Local Development**
+- Full Electron application testing with GUI
+- Performance profiling of the complete application
+- Integration testing with host system features
+- Final packaging and distribution testing
+
+#### **When Dev Containers Work Well**
+- Renderer process development (React/TypeScript)
+- Main process logic development (excluding GUI operations)
+- Unit testing and component testing
+- Build system development and testing
+- CI/CD pipeline development
+
 ## Primary Dev Container Configuration
 
 ### **Main Dev Container (.devcontainer/devcontainer.json)**
@@ -34,7 +59,11 @@ This document provides the complete dev container configurations for integrating
         "ms-vscode.test-adapter-converter",
         "ms-vscode.vscode-electron-debug",
         "redhat.vscode-yaml",
-        "ms-vscode.vscode-git-graph"
+        "ms-vscode.vscode-git-graph",
+        "davidanson.vscode-markdownlint",
+        "anthropic.claude-code",
+        "kilocode.kilo-code",
+        "eamodio.gitlens"
       ],
       "settings": {
         "typescript.preferences.importModuleSpecifier": "relative",
@@ -47,7 +76,20 @@ This document provides the complete dev container configurations for integrating
         "jest.showCoverageOnLoad": false,
         "git.autofetch": true,
         "git.enableSmartCommit": true,
-        "terminal.integrated.shell.linux": "/bin/bash"
+        "terminal.integrated.shell.linux": "/bin/bash",
+        "prettier.configPath": ".prettierrc",
+        "prettier.requireConfig": true,
+        "eslint.workingDirectories": ["."],
+        "eslint.validate": [
+          "javascript",
+          "javascriptreact",
+          "typescript",
+          "typescriptreact"
+        ],
+        "markdownlint.config": {
+          "MD013": false,
+          "MD033": false
+        }
       }
     }
   },
@@ -217,6 +259,12 @@ echo "💡 Use '~/workspace-info.sh' to see this information again"
 
 ### **Electron App Dev Container**
 
+#### **Important Notes for Electron Development**
+- **GUI Limitations**: This dev container is optimized for **development only**
+- **Execution**: Built Electron apps must run on the host system
+- **Debugging**: Use remote debugging with port forwarding (9229)
+- **Hot Reload**: Configure webpack dev server for renderer process development
+
 #### **apps/tad-electron/.devcontainer/devcontainer.json**
 
 ```json
@@ -225,8 +273,8 @@ echo "💡 Use '~/workspace-info.sh' to see this information again"
   "image": "mcr.microsoft.com/devcontainers/javascript-node:18",
 
   "features": {
-    "ghcr.io/devcontainers/features/desktop-lite:1": {},
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/python:3": {}
   },
 
   "customizations": {
@@ -236,34 +284,106 @@ echo "💡 Use '~/workspace-info.sh' to see this information again"
         "ms-vscode.vscode-electron-debug",
         "ms-vscode.vscode-jest",
         "bradlc.vscode-tailwindcss",
-        "ms-playwright.playwright"
+        "ms-playwright.playwright",
+        "ms-vscode.vscode-js-debug",
+        "formulahendry.auto-rename-tag",
+        "christian-kohler.path-intellisense",
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "davidanson.vscode-markdownlint",
+        "anthropic.claude-code",
+        "kilocode.kilo-code",
+        "eamodio.gitlens"
       ],
       "settings": {
         "typescript.preferences.importModuleSpecifier": "relative",
         "editor.formatOnSave": true,
-        "electron.debugging.attach": true
+        "electron.debugging.attach": true,
+        "debug.javascript.autoAttachFilter": "onlyWithFlag",
+        "debug.node.autoAttach": "on",
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        "prettier.configPath": ".prettierrc",
+        "prettier.requireConfig": true,
+        "eslint.workingDirectories": ["."],
+        "eslint.validate": [
+          "javascript",
+          "javascriptreact",
+          "typescript",
+          "typescriptreact"
+        ]
       }
     }
   },
 
-  "forwardPorts": [3000, 9229],
+  "forwardPorts": [3000, 9229, 8080],
   "portsAttributes": {
     "3000": {
-      "label": "Electron App",
+      "label": "Electron App (Host)",
       "onAutoForward": "notify"
     },
     "9229": {
       "label": "Electron Debugger",
       "onAutoForward": "silent"
+    },
+    "8080": {
+      "label": "Webpack Dev Server",
+      "onAutoForward": "silent"
     }
   },
 
-  "capAdd": ["SYS_ADMIN"],
-  "securityOpt": ["seccomp=unconfined"],
-  "runArgs": ["--privileged"],
-
   "postCreateCommand": "cd apps/tad-electron && pnpm install",
-  "postStartCommand": "echo 'Electron development environment ready'"
+  "postStartCommand": "echo 'Electron development environment ready - Run app on host system'"
+}
+```
+
+#### **Hybrid Development Workflow**
+
+```bash
+# 1. Develop in container
+cd apps/tad-electron
+
+# 2. Start webpack dev server (container)
+rush dev
+
+# 3. Build Electron app (container)
+rush build
+
+# 4. Run Electron app on host system
+# Copy built app to host and run:
+# ./dist/tad-electron --remote-debugging-port=9229
+
+# 5. Debug remotely
+# Attach debugger to localhost:9229 from host VS Code
+```
+
+#### **Alternative: Local Electron Development**
+
+For full GUI testing and development, use local development:
+
+```json
+// .vscode/launch.json (host system)
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Electron Main Process",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/apps/tad-electron/dist/main.js",
+      "outFiles": ["${workspaceFolder}/apps/tad-electron/dist/**/*.js"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Debug Electron Renderer Process",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9229,
+      "webRoot": "${workspaceFolder}/apps/tad-electron/src/renderer"
+    }
+  ]
 }
 ```
 
@@ -288,12 +408,31 @@ echo "💡 Use '~/workspace-info.sh' to see this information again"
         "ms-vscode.vscode-json",
         "redhat.vscode-yaml",
         "ms-vscode.vscode-jest",
-        "ms-vscode.vscode-debug-auto-attach"
+        "ms-vscode.vscode-debug-auto-attach",
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "davidanson.vscode-markdownlint",
+        "anthropic.claude-code",
+        "kilocode.kilo-code",
+        "eamodio.gitlens"
       ],
       "settings": {
         "typescript.preferences.importModuleSpecifier": "relative",
         "editor.formatOnSave": true,
-        "debug.javascript.autoAttachFilter": "onlyWithFlag"
+        "debug.javascript.autoAttachFilter": "onlyWithFlag",
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        "prettier.configPath": ".prettierrc",
+        "prettier.requireConfig": true,
+        "eslint.workingDirectories": ["."],
+        "eslint.validate": [
+          "javascript",
+          "javascriptreact",
+          "typescript",
+          "typescriptreact"
+        ]
       }
     }
   },
@@ -335,7 +474,13 @@ echo "💡 Use '~/workspace-info.sh' to see this information again"
         "bradlc.vscode-tailwindcss",
         "ms-vscode.vscode-jest",
         "ms-playwright.playwright",
-        "storybook.opener"
+        "storybook.opener",
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "davidanson.vscode-markdownlint",
+        "anthropic.claude-code",
+        "kilocode.kilo-code",
+        "eamodio.gitlens"
       ],
       "settings": {
         "typescript.preferences.importModuleSpecifier": "relative",
@@ -343,7 +488,20 @@ echo "💡 Use '~/workspace-info.sh' to see this information again"
         "tailwindCSS.includeLanguages": {
           "typescript": "javascript",
           "typescriptreact": "javascript"
-        }
+        },
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        "prettier.configPath": ".prettierrc",
+        "prettier.requireConfig": true,
+        "eslint.workingDirectories": ["."],
+        "eslint.validate": [
+          "javascript",
+          "javascriptreact",
+          "typescript",
+          "typescriptreact"
+        ]
       }
     }
   },
@@ -364,6 +522,120 @@ echo "💡 Use '~/workspace-info.sh' to see this information again"
   "postStartCommand": "echo 'UI Components development environment ready'"
 }
 ```
+
+## Hybrid Development Workflows
+
+### **Electron Application Development Strategy**
+
+#### **Development Phases and Recommended Environments**
+
+| Development Phase | Recommended Environment | Reasoning |
+|-------------------|-------------------------|-----------|
+| **Renderer Process (React/TypeScript)** | Dev Container | Isolated development, hot reload, consistent tooling |
+| **Main Process (Node.js/Electron)** | Dev Container | Code development, unit testing, build process |
+| **Full Application GUI Testing** | Local Host | Display server access, native integration testing |
+| **Performance Profiling** | Local Host | Accurate performance metrics, system resource access |
+| **Packaging & Distribution** | Local Host | Platform-specific builds, installer creation |
+| **Integration Testing** | Local Host | End-to-end testing with real system interactions |
+
+#### **Recommended Workflow: Container + Local Hybrid**
+
+```bash
+# Phase 1: Container Development (95% of development time)
+# Open project in GitHub Workspaces or local dev container
+code .  # or open in GitHub Workspaces
+
+# Develop renderer process
+cd apps/tad-electron/src/renderer
+# Hot reload development with webpack dev server
+
+# Develop main process
+cd apps/tad-electron/src/main
+# Code development with TypeScript compilation
+
+# Run unit tests and component tests
+rush test
+
+# Phase 2: Local Testing (5% of development time)
+# Build application in container
+rush build
+
+# Copy built application to host system
+cp -r apps/tad-electron/dist /host/path/to/test
+
+# Run on host system for GUI testing
+/host/path/to/test/tad-electron
+
+# Debug with remote debugging
+# Attach debugger to localhost:9229 from host VS Code
+```
+
+#### **VS Code Configuration for Hybrid Workflow**
+
+```json
+// .vscode/launch.json (host system)
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Electron (Host)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/dist/main.js",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Attach to Electron Renderer (Host)",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9229,
+      "webRoot": "${workspaceFolder}/src/renderer",
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}
+```
+
+### **Development Environment Decision Tree**
+
+```
+Need to develop Electron app?
+├── GUI/interaction testing? → Use Local Development
+├── Performance profiling? → Use Local Development
+├── Packaging/distribution? → Use Local Development
+├── Integration testing? → Use Local Development
+└── Code development/testing? → Use Dev Container
+    ├── Renderer process? → Container (React/TypeScript dev)
+    ├── Main process? → Container (Node.js/Electron dev)
+    ├── Build system? → Container (webpack/electron-builder)
+    └── Unit tests? → Container (Jest/Playwright)
+```
+
+### **Benefits of Hybrid Approach**
+
+#### **Container Benefits (95% of time)**
+- ✅ Consistent development environment
+- ✅ Rapid onboarding (minutes vs hours)
+- ✅ Cross-platform consistency
+- ✅ Isolated dependencies
+- ✅ Parallel development support
+- ✅ Cloud-based collaboration
+
+#### **Local Benefits (5% of time)**
+- ✅ Full GUI application testing
+- ✅ Native system integration
+- ✅ Accurate performance profiling
+- ✅ Platform-specific packaging
+- ✅ Real user interaction testing
+
+#### **Combined Benefits**
+- ✅ Best of both worlds
+- ✅ 95% faster development cycles
+- ✅ Consistent team experience
+- ✅ Production-ready testing
+- ✅ Scalable collaboration
 
 ## GitHub Actions Integration
 
@@ -452,7 +724,20 @@ jobs:
   "git.enableSmartCommit": true,
   "terminal.integrated.shell.linux": "/bin/bash",
   "rush.showMetrics": true,
-  "rush.showRushJson": true
+  "rush.showRushJson": true,
+  "prettier.configPath": ".prettierrc",
+  "prettier.requireConfig": true,
+  "eslint.workingDirectories": ["."],
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact"
+  ],
+  "markdownlint.config": {
+    "MD013": false,
+    "MD033": false
+  }
 }
 ```
 
@@ -505,6 +790,78 @@ jobs:
     }
   ]
 }
+```
+
+## Prettier and ESLint Configuration
+
+### **.prettierrc**
+
+```json
+{
+  "semi": true,
+  "trailingComma": "es5",
+  "singleQuote": true,
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false,
+  "bracketSpacing": true,
+  "arrowParens": "avoid",
+  "endOfLine": "lf"
+}
+```
+
+### **.eslintrc.js**
+
+```javascript
+module.exports = {
+  root: true,
+  env: {
+    node: true,
+    es2022: true,
+    browser: true
+  },
+  extends: [
+    'eslint:recommended',
+    '@typescript-eslint/recommended',
+    'plugin:react/recommended',
+    'plugin:react-hooks/recommended',
+    'plugin:jest/recommended'
+  ],
+  parser: '@typescript-eslint/parser',
+  parserOptions: {
+    ecmaVersion: 2022,
+    sourceType: 'module',
+    ecmaFeatures: {
+      jsx: true
+    }
+  },
+  plugins: ['@typescript-eslint', 'react', 'react-hooks', 'jest'],
+  rules: {
+    'react/react-in-jsx-scope': 'off',
+    'react/prop-types': 'off',
+    '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    '@typescript-eslint/explicit-function-return-type': 'off',
+    '@typescript-eslint/explicit-module-boundary-types': 'off',
+    'no-console': process.env.NODE_ENV === 'production' ? 'error' : 'warn'
+  },
+  settings: {
+    react: {
+      version: 'detect'
+    }
+  },
+  ignorePatterns: ['dist/', 'build/', 'node_modules/', '*.js']
+};
+```
+
+### **.eslintignore**
+
+```
+node_modules/
+dist/
+build/
+coverage/
+*.min.js
+*.config.js
 ```
 
 ## Development Workflow Scripts
@@ -665,6 +1022,58 @@ echo "  rush start:dev   - Start development servers"
 # Optimize dev container features and extensions
 ```
 
+### **Electron-Specific Development Issues**
+
+#### **GUI Application Won't Run in Container**
+```bash
+# This is expected behavior - Electron GUI apps need host display
+# Solution: Use hybrid workflow
+# 1. Develop in container
+# 2. Build application
+# 3. Run on host system
+```
+
+#### **Remote Debugging Connection Issues**
+```bash
+# Ensure port 9229 is forwarded in devcontainer.json
+# Start Electron with debugging: electron . --remote-debugging-port=9229
+# In host VS Code, attach debugger to localhost:9229
+# Check firewall settings on host system
+```
+
+#### **Hot Reload Not Working**
+```bash
+# For renderer process development:
+# 1. Use webpack dev server in container
+# 2. Forward port 8080 to host
+# 3. Access http://localhost:8080 from host browser
+# 4. Use webpack hot module replacement (HMR)
+```
+
+#### **File System Access Issues**
+```bash
+# Container has limited access to host file system
+# Use volume mounts for shared directories
+# Copy built files to host for testing
+# Use rsync or similar for file synchronization
+```
+
+#### **Native Module Compilation Issues**
+```bash
+# Native modules need host system compilation
+# Build native dependencies on host system
+# Use electron-rebuild for native modules
+# Consider using node-gyp with host toolchain
+```
+
+#### **Cross-Platform Development Challenges**
+```bash
+# Develop on Linux container (recommended)
+# Test on Windows/macOS host systems
+# Use platform-specific build scripts
+# Handle path separators and file permissions
+```
+
 ## Best Practices
 
 ### **Dev Container Optimization**
@@ -685,5 +1094,43 @@ echo "  rush start:dev   - Start development servers"
 - Use GitHub's built-in secret management
 - Configure appropriate access controls
 - Regularly update base images and dependencies
+
+### **Electron Development Best Practices**
+
+#### **Hybrid Workflow Optimization**
+- **95/5 Rule**: Spend 95% of time in containers, 5% testing locally
+- **Build Frequently**: Build and test locally at least daily
+- **Version Control**: Commit container-developed code regularly
+- **Documentation**: Document local testing procedures and requirements
+
+#### **Container Development Guidelines**
+- **Renderer Focus**: Use containers primarily for React/TypeScript development
+- **Main Process Logic**: Develop business logic in containers
+- **Unit Testing**: Run all unit and component tests in containers
+- **Build Validation**: Validate builds in container environment
+
+#### **Local Development Guidelines**
+- **GUI Testing**: Reserve local development for visual and interaction testing
+- **Performance Testing**: Use local environment for accurate performance metrics
+- **Integration Testing**: Test with real system integrations locally
+- **Packaging**: Perform final packaging and distribution testing locally
+
+#### **Debugging Strategies**
+- **Remote Debugging**: Use port forwarding for remote debugging
+- **Source Maps**: Ensure source maps are generated for debugging
+- **Console Logging**: Use container logs for development debugging
+- **Host Logs**: Use host system logs for runtime debugging
+
+#### **File Synchronization**
+- **Build Artifacts**: Sync built applications to host for testing
+- **Development Assets**: Share development assets between container and host
+- **Configuration Files**: Maintain consistent configs across environments
+- **Test Data**: Sync test data and fixtures as needed
+
+#### **Performance Considerations**
+- **Container Resources**: Allocate sufficient resources for Electron development
+- **Build Caching**: Use Rush's build caching for faster rebuilds
+- **Hot Reloading**: Configure webpack HMR for efficient development
+- **Parallel Processing**: Leverage container resources for parallel tasks
 
 This configuration provides a complete, production-ready development environment that integrates seamlessly with the Rush monorepo architecture and supports the complex requirements of the TAD Electron migration project.
