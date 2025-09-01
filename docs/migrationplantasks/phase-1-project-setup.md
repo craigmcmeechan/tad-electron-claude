@@ -56,22 +56,32 @@ Phase 1 establishes the foundational infrastructure for the TAD Electron migrati
     "build": "webpack --mode production",
     "start": "electron .",
     "dist": "electron-builder",
-    "test": "jest"
+    "test": "jest",
+    "log:dev": "tail -f ~/.config/tad-electron/logs/tad-dev-*.log",
+    "log:prod": "tail -f ~/.config/tad-electron/logs/tad-*.log"
   },
   "dependencies": {
-    "electron": "^25.0.0"
+    "electron": "^25.0.0",
+    "electron-timber": "^1.0.0",
+    "winston": "^3.8.0",
+    "winston-daily-rotate-file": "^4.7.0",
+    "electron-store": "^8.1.1",
+    "ajv": "^8.12.0",
+    "chokidar": "^3.5.3"
   },
   "devDependencies": {
     "webpack": "^5.0.0",
     "electron-builder": "^24.0.0",
-    "jest": "^29.0.0"
+    "jest": "^29.0.0",
+    "@types/winston": "^2.4.4",
+    "@types/node": "^18.0.0"
   }
 }
 ```
 
 ### 1.2 Core Architecture Migration
 **Priority:** Critical
-**Effort:** 3-4 days
+**Effort:** 4-5 days
 **Owner:** Lead Developer
 **Dependencies:** 1.1
 
@@ -81,24 +91,69 @@ Phase 1 establishes the foundational infrastructure for the TAD Electron migrati
 - [ ] Setup preload script with secure context bridge (`src/main/preload.js`)
 - [ ] Create basic IPC communication infrastructure
 - [ ] Implement application menu and window management
-- [ ] Setup error handling and logging framework
+- [ ] Setup comprehensive electron-timber logging framework
 - [ ] Create application state persistence
+- [ ] Install and configure electron-timber dependencies
+- [ ] Setup logging configuration management with electron-store
+- [ ] Implement multi-process logging architecture (main + renderer)
+- [ ] Setup logging IPC handlers and preload API
+- [ ] Install and configure electron-store dependencies (electron-store, ajv, chokidar)
+- [ ] Setup persistent store infrastructure with StoreManager
+- [ ] Implement BackupManager for automatic data backups
+- [ ] Create SchemaValidator for data validation and migration
+- [ ] Setup ErrorCorrectionManager for rollback capabilities
+- [ ] Configure persistent store IPC handlers and preload API
+- [ ] Initialize store schema and default configurations
 
 #### Deliverables:
 - [ ] `src/main/main.js` - Main process entry point
 - [ ] `src/main/TADApplication.js` - Core application class
-- [ ] `src/main/preload.js` - Secure preload script
+- [ ] `src/main/preload.js` - Secure preload script with logging API
 - [ ] `src/main/IPCManager.js` - IPC communication handler
 - [ ] `src/main/WindowManager.js` - Window management utilities
-- [ ] `src/main/Logger.js` - Application logging system
+- [ ] `src/main/logger/MainLogger.ts` - Electron-timber main process logger
+- [ ] `src/main/logger/LoggerConfig.ts` - Logging configuration manager
+- [ ] `src/main/logger/LoggerIPC.ts` - Logging IPC handlers
+- [ ] `src/main/logger/LogTransport.ts` - Custom transport implementations
+- [ ] `src/renderer/logger/RendererLogger.ts` - Renderer process logger
+- [ ] `src/renderer/logger/LoggerBridge.ts` - IPC bridge for renderer logging
+- [ ] `src/shared/types/logging.ts` - Logging type definitions
+- [ ] `src/shared/utils/environment.ts` - Environment detection utilities
+- [ ] `config/logging.development.js` - Development logging configuration
+- [ ] `config/logging.production.js` - Production logging configuration
+- [ ] `config/logging.test.js` - Test logging configuration
+- [ ] `src/main/store/StoreManager.js` - Core persistent store management
+- [ ] `src/main/store/BackupManager.js` - Automatic backup and recovery system
+- [ ] `src/main/store/SchemaValidator.js` - JSON Schema validation and migration
+- [ ] `src/main/store/ErrorCorrectionManager.js` - Binary diff and rollback system
+- [ ] `src/main/store/PerformanceMonitor.js` - Store performance monitoring
+- [ ] `src/main/ipc/store-handlers.js` - IPC handlers for store operations
+- [ ] `src/main/preload/store-preload.js` - Secure store API for renderer processes
+- [ ] `src/renderer/services/StoreService.js` - High-level store service for renderer
+- [ ] `src/renderer/hooks/useStore.js` - React hooks for reactive store access
+- [ ] `src/shared/store/schema.js` - Store schema definitions
+- [ ] `config/store.defaults.js` - Default store configuration
 
 #### Success Criteria:
 - [ ] Main process initializes without errors
 - [ ] Application window opens and displays basic content
 - [ ] IPC communication works between main and renderer processes
 - [ ] Application menu displays correctly on all platforms
-- [ ] Basic error handling captures and logs errors
+- [ ] Comprehensive logging system captures all log levels (error, warn, info, debug, trace, silly)
+- [ ] Multi-process logging works (main + renderer processes)
+- [ ] Log files are created and rotated properly
+- [ ] Logging configuration is loaded from environment-specific files
+- [ ] Security filtering and data sanitization is functional
+- [ ] Performance monitoring logs are generated
 - [ ] Application state persists between restarts
+- [ ] Persistent store system initializes successfully with electron-store
+- [ ] Backup system creates automatic backups on critical operations
+- [ ] Schema validation prevents invalid data storage
+- [ ] Error correction system creates binary diffs for rollback capabilities
+- [ ] IPC communication works between main and renderer processes for store operations
+- [ ] Store data is properly encrypted for sensitive information
+- [ ] Store performance monitoring captures operation metrics
+- [ ] Store file watching detects external changes and reloads data
 
 #### Technical Implementation:
 
@@ -128,23 +183,124 @@ app.on('activate', () => {
 });
 ```
 
+**Logging Infrastructure Setup:**
+```javascript
+// src/main/TADApplication.js - Logging Integration
+const { MainLogger } = require('./logger/MainLogger');
+const { LoggerIPC } = require('./logger/LoggerIPC');
+const { LoggerConfigManager } = require('./logger/LoggerConfig');
+
+class TADApplication {
+  constructor() {
+    // ... existing constructor code ...
+    this.logger = null;
+    this.loggerIPC = null;
+    this.loggerConfig = null;
+  }
+
+  async initialize() {
+    try {
+      // Initialize logging first
+      await this.initializeLogging();
+
+      this.logger.info('Initializing TAD Electron Application', {
+        version: app.getVersion(),
+        platform: process.platform,
+        arch: process.arch,
+        nodeVersion: process.version,
+        electronVersion: process.versions.electron
+      });
+
+      // Continue with normal initialization
+      await this.initializeCoreComponents();
+    } catch (error) {
+      // Fallback logging if main logger fails
+      console.error('Failed to initialize TAD Application:', error);
+      app.quit();
+    }
+  }
+
+  async initializeLogging() {
+    // Initialize logger configuration
+    this.loggerConfig = new LoggerConfigManager();
+
+    // Load logging configuration
+    const config = this.loggerConfig.getConfig();
+
+    // Set log directory to userData/logs
+    const userDataPath = app.getPath('userData');
+    config.file.directory = path.join(userDataPath, 'logs');
+
+    // Initialize main logger
+    this.logger = new MainLogger(config);
+
+    // Initialize logging IPC handlers
+    this.loggerIPC = new LoggerIPC(this.logger);
+
+    this.logger.info('Logging system initialized successfully');
+  }
+}
+```
+
+**Preload Script with Logging API:**
+```javascript
+// src/main/preload.js
+const { contextBridge, ipcRenderer } = require('electron');
+
+// Expose protected APIs to renderer process
+contextBridge.exposeInMainWorld('tadAPI', {
+  // Application info
+  getAppInfo: () => ipcRenderer.invoke('get-app-info'),
+
+  // Logging API
+  logging: {
+    log: (level, message, meta) => ipcRenderer.invoke('log-message', level, message, meta),
+    getLogLevel: () => ipcRenderer.invoke('get-log-level'),
+    setLogLevel: (level) => ipcRenderer.invoke('set-log-level', level),
+    getConfig: () => ipcRenderer.invoke('get-logging-config'),
+    updateConfig: (config) => ipcRenderer.invoke('update-logging-config', config)
+  },
+
+  // Window management
+  minimize: () => ipcRenderer.invoke('window-minimize'),
+  maximize: () => ipcRenderer.invoke('window-maximize'),
+  close: () => ipcRenderer.invoke('window-close'),
+
+  // Event listeners
+  onAppError: (callback) => ipcRenderer.on('app-error', callback),
+  onAppReady: (callback) => ipcRenderer.on('app-ready', callback)
+});
+
+// Remove dangerous globals
+delete window.require;
+delete window.process;
+delete window.module;
+```
+
 **TADApplication Class:**
 ```javascript
 // src/main/TADApplication.js
 const { BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
 const Logger = require('./Logger');
+const StoreManager = require('./store/StoreManager');
+const StoreIPCHandlers = require('./ipc/store-handlers');
 
 class TADApplication {
   constructor() {
     this.mainWindow = null;
     this.logger = new Logger();
+    this.storeManager = new StoreManager();
+    this.storeIPCHandlers = null;
     this.isDevelopment = process.env.NODE_ENV === 'development';
   }
 
   async initialize() {
     try {
       this.logger.info('Initializing TAD Electron Application');
+
+      // Initialize persistent store first
+      await this.initializePersistentStore();
 
       await this.createMainWindow();
       this.setupIPC();
@@ -155,6 +311,23 @@ class TADApplication {
     } catch (error) {
       this.logger.error('Failed to initialize TAD Application:', error);
       app.quit();
+    }
+  }
+
+  async initializePersistentStore() {
+    try {
+      this.logger.info('Initializing persistent store system');
+
+      // Initialize store manager
+      await this.storeManager.initialize();
+
+      // Setup store IPC handlers
+      this.storeIPCHandlers = new StoreIPCHandlers(this.storeManager);
+
+      this.logger.info('Persistent store system initialized successfully');
+    } catch (error) {
+      this.logger.error('Failed to initialize persistent store:', error);
+      throw error;
     }
   }
 
@@ -281,6 +454,10 @@ class TADApplication {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.close();
     }
+
+    if (this.storeManager) {
+      this.storeManager.dispose();
+    }
   }
 }
 
@@ -291,6 +468,9 @@ module.exports = TADApplication;
 ```javascript
 // src/main/preload.js
 const { contextBridge, ipcRenderer } = require('electron');
+
+// Import store preload for persistent data storage
+require('./store-preload');
 
 // Expose protected APIs to renderer process
 contextBridge.exposeInMainWorld('tadAPI', {
@@ -323,12 +503,19 @@ delete window.module;
 - [ ] Integration tests for IPC communication
 - [ ] Basic E2E test for window creation
 - [ ] Cross-platform testing (Windows, macOS, Linux)
+- [ ] Logging system unit tests (MainLogger, RendererLogger)
+- [ ] IPC logging communication tests
+- [ ] Log file rotation and retention tests
+- [ ] Security filtering and sanitization tests
+- [ ] Performance monitoring tests
 
 ### Code Quality:
 - [ ] ESLint configuration for Electron main process
 - [ ] TypeScript support (optional but recommended)
 - [ ] Code documentation with JSDoc
 - [ ] Security audit of preload script
+- [ ] Logging configuration validation
+- [ ] Type safety for logging interfaces
 
 ## Risks and Mitigations
 
@@ -353,7 +540,9 @@ delete window.module;
 - [ ] Main window displays with proper dimensions and controls
 - [ ] Application menu works correctly on all platforms
 - [ ] IPC communication established between processes
-- [ ] Basic error handling and logging functional
+- [ ] Comprehensive electron-timber logging system functional
+- [ ] Multi-process logging (main + renderer) working
+- [ ] Log files created with proper rotation and formatting
 - [ ] Development workflow (hot-reload, debugging) working
 
 ### Quality Requirements:
@@ -362,27 +551,55 @@ delete window.module;
 - [ ] Comprehensive error handling implemented
 - [ ] Logging provides adequate debugging information
 - [ ] Application state properly managed
+- [ ] Logging configuration properly loaded and validated
+- [ ] Security filtering and data sanitization working
+- [ ] Performance monitoring logs generated
+- [ ] Persistent store system fully operational with electron-store
+- [ ] Store data validation and schema enforcement working
+- [ ] Store backup system creates automatic backups
+- [ ] Store error correction creates binary diffs for rollbacks
+- [ ] Store IPC communication secure and functional
+- [ ] Store performance monitoring captures metrics
+- [ ] Store file watching detects external changes
 
 ### Performance Requirements:
-- [ ] Application startup time < 3 seconds
-- [ ] Memory usage < 100MB at startup
-- [ ] No memory leaks in basic operations
-- [ ] Responsive UI interactions
+ - [ ] Application startup time < 3 seconds
+ - [ ] Memory usage < 100MB at startup
+ - [ ] No memory leaks in basic operations
+ - [ ] Responsive UI interactions
+ - [ ] Store initialization < 500ms
+ - [ ] Store read operations < 10ms average
+ - [ ] Store write operations < 50ms average
+ - [ ] Store backup creation < 100ms
+ - [ ] Store schema validation < 20ms
 
 ## Deliverables
 
 ### Code Deliverables:
 - [ ] Complete Electron project structure
-- [ ] Main process implementation
-- [ ] Preload script with secure API
-- [ ] Basic renderer process setup
+- [ ] Main process implementation with logging integration
+- [ ] Preload script with secure API including logging
+- [ ] Basic renderer process setup with logging
 - [ ] Build and development configuration
+- [ ] Comprehensive logging system (electron-timber + winston)
+- [ ] Logging configuration files for all environments
+- [ ] IPC logging handlers and preload API
+- [ ] Security filtering and data sanitization
+- [ ] Performance monitoring integration
+- [ ] Complete persistent store infrastructure (StoreManager, BackupManager, SchemaValidator, ErrorCorrectionManager)
+- [ ] Store IPC handlers and secure preload API
+- [ ] Store schema definitions and default configurations
+- [ ] Store performance monitoring and metrics collection
+- [ ] Store backup and recovery system
+- [ ] Store error correction with binary diffs and rollback capabilities
 
 ### Documentation Deliverables:
 - [ ] Setup and development guide
 - [ ] Architecture documentation
 - [ ] API documentation for exposed methods
 - [ ] Troubleshooting guide
+- [ ] Logging configuration guide
+- [ ] Logging usage examples and best practices
 
 ### Testing Deliverables:
 - [ ] Unit test suite for main process

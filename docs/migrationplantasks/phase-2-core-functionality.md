@@ -31,6 +31,16 @@ Phase 2 focuses on migrating the core functionality of TAD from the VS Code exte
 - [ ] Create workspace configuration management and persistence
 - [ ] Setup `.tad/` directory structure initialization and validation
 - [ ] Implement workspace boundary validation and security
+- [ ] Integrate comprehensive logging throughout workspace operations
+- [ ] Add performance monitoring for file system operations
+- [ ] Implement security logging for file access attempts
+- [ ] Setup workspace-specific logging configuration
+- [ ] Integrate persistent store for workspace configuration persistence
+- [ ] Implement store-based workspace settings management
+- [ ] Setup store synchronization for workspace metadata
+- [ ] Configure store backup for critical workspace operations
+- [ ] Implement store-based template index caching
+- [ ] Setup store error correction for workspace data integrity
 
 #### Deliverables:
 - [ ] `src/main/WorkspaceManager.js` - Core workspace management
@@ -46,6 +56,15 @@ Phase 2 focuses on migrating the core functionality of TAD from the VS Code exte
 - [ ] File system changes are detected and handled in real-time
 - [ ] Workspace configuration persists between application restarts
 - [ ] Workspace boundaries are properly enforced for security
+- [ ] Comprehensive logging captures all workspace operations
+- [ ] Security events are logged for file access attempts
+- [ ] Performance metrics are tracked for file operations
+- [ ] Error conditions are logged with full context
+- [ ] Workspace configurations persist across application restarts
+- [ ] Template index is cached in persistent store for performance
+- [ ] Workspace settings are synchronized between processes
+- [ ] Store backups are created for critical workspace operations
+- [ ] Store error correction maintains workspace data integrity
 
 #### Technical Implementation:
 
@@ -56,14 +75,24 @@ const fs = require('fs').promises;
 const path = require('path');
 const chokidar = require('chokidar');
 const { ipcMain, dialog } = require('electron');
-const Logger = require('./Logger');
+const { MainLogger } = require('./logger/MainLogger');
+const { SecurityFilter } = require('./logger/SecurityFilter');
 
 class WorkspaceManager {
-  constructor() {
+  constructor(logger, storeManager) {
     this.currentWorkspace = null;
     this.fileWatcher = null;
     this.templateIndex = new Map();
-    this.logger = new Logger();
+    this.storeManager = storeManager;
+    this.logger = logger.child({
+      component: 'WorkspaceManager',
+      workspaceId: null
+    });
+    this.securityFilter = new SecurityFilter();
+    this.performanceMonitor = {
+      startOperation: (name) => this.logger.time(`workspace-${name}`),
+      endOperation: (name) => this.logger.timeEnd(`workspace-${name}`)
+    };
   }
 
   async selectWorkspace() {
@@ -81,14 +110,44 @@ class WorkspaceManager {
   }
 
   async setWorkspace(workspacePath) {
+    const operationId = `set-workspace-${Date.now()}`;
+    this.performanceMonitor.startOperation(operationId);
+
     try {
-      this.logger.info(`Setting workspace to: ${workspacePath}`);
+      // Sanitize and validate workspace path
+      const sanitizedPath = this.securityFilter.sanitizePath(workspacePath);
+      this.logger.info('Setting workspace', {
+        requestedPath: workspacePath,
+        sanitizedPath,
+        operationId,
+        userId: process.env.USER || 'unknown',
+        platform: process.platform
+      });
+
+      // Security validation
+      if (sanitizedPath !== workspacePath) {
+        this.logger.warn('Workspace path sanitized for security', {
+          originalPath: workspacePath,
+          sanitizedPath,
+          operationId
+        });
+      }
 
       // Validate workspace
-      await this.validateWorkspace(workspacePath);
+      await this.validateWorkspace(sanitizedPath);
 
       // Set current workspace
-      this.currentWorkspace = workspacePath;
+      this.currentWorkspace = sanitizedPath;
+
+      // Update logger context
+      this.logger = this.logger.child({
+        component: 'WorkspaceManager',
+        workspaceId: path.basename(sanitizedPath),
+        workspacePath: sanitizedPath
+      });
+
+      // Load workspace configuration from persistent store
+      await this.loadWorkspaceConfiguration();
 
       // Initialize workspace structure
       await this.initializeWorkspaceStructure();
@@ -99,12 +158,28 @@ class WorkspaceManager {
       // Build template index
       await this.buildTemplateIndex();
 
+      // Save workspace state to persistent store
+      await this.saveWorkspaceState();
+
       // Notify renderer
       this.notifyWorkspaceChanged();
 
-      this.logger.info('Workspace set successfully');
+      this.performanceMonitor.endOperation(operationId);
+      this.logger.info('Workspace set successfully', {
+        templateCount: this.templateIndex.size,
+        operationId,
+        duration: this.getLastOperationDuration(operationId)
+      });
+
     } catch (error) {
-      this.logger.error('Failed to set workspace:', error);
+      this.performanceMonitor.endOperation(operationId);
+      this.logger.error('Failed to set workspace', {
+        error: error.message,
+        stack: error.stack,
+        workspacePath,
+        operationId,
+        duration: this.getLastOperationDuration(operationId)
+      });
       throw error;
     }
   }
@@ -223,21 +298,112 @@ class WorkspaceManager {
   }
 
   handleFileAdded(filePath) {
-    this.logger.debug(`File added: ${filePath}`);
-    // Rebuild index for affected files
-    this.buildTemplateIndex();
+    const operationId = `file-add-${Date.now()}`;
+    this.performanceMonitor.startOperation(operationId);
+
+    this.logger.info('File added to workspace', {
+      filePath: this.securityFilter.sanitizePath(filePath),
+      relativePath: path.relative(this.currentWorkspace, filePath),
+      operationId,
+      fileType: this.getFileType(filePath),
+      fileSize: this.getFileSize(filePath)
+    });
+
+    try {
+      // Security validation
+      if (!this.securityFilter.validateFileAccess(filePath, 'read')) {
+        this.logger.warn('File access denied', {
+          filePath: this.securityFilter.sanitizePath(filePath),
+          operationId,
+          reason: 'security policy violation'
+        });
+        return;
+      }
+
+      // Rebuild index for affected files
+      await this.buildTemplateIndex();
+
+      this.performanceMonitor.endOperation(operationId);
+      this.logger.debug('File addition processed successfully', {
+        operationId,
+        duration: this.getLastOperationDuration(operationId)
+      });
+
+    } catch (error) {
+      this.performanceMonitor.endOperation(operationId);
+      this.logger.error('Failed to process file addition', {
+        filePath: this.securityFilter.sanitizePath(filePath),
+        operationId,
+        error: error.message,
+        duration: this.getLastOperationDuration(operationId)
+      });
+    }
   }
 
   handleFileChanged(filePath) {
-    this.logger.debug(`File changed: ${filePath}`);
-    // Update index for changed file
-    this.updateFileInIndex(filePath);
+    const operationId = `file-change-${Date.now()}`;
+    this.performanceMonitor.startOperation(operationId);
+
+    this.logger.debug('File changed in workspace', {
+      filePath: this.securityFilter.sanitizePath(filePath),
+      relativePath: path.relative(this.currentWorkspace, filePath),
+      operationId,
+      fileType: this.getFileType(filePath),
+      isTemplate: this.isTemplateFile(filePath)
+    });
+
+    try {
+      // Update index for changed file
+      await this.updateFileInIndex(filePath);
+
+      this.performanceMonitor.endOperation(operationId);
+      this.logger.trace('File change processed', {
+        operationId,
+        duration: this.getLastOperationDuration(operationId)
+      });
+
+    } catch (error) {
+      this.performanceMonitor.endOperation(operationId);
+      this.logger.error('Failed to process file change', {
+        filePath: this.securityFilter.sanitizePath(filePath),
+        operationId,
+        error: error.message,
+        duration: this.getLastOperationDuration(operationId)
+      });
+    }
   }
 
   handleFileRemoved(filePath) {
-    this.logger.debug(`File removed: ${filePath}`);
-    // Remove from index
-    this.templateIndex.delete(filePath);
+    const operationId = `file-remove-${Date.now()}`;
+    this.performanceMonitor.startOperation(operationId);
+
+    this.logger.info('File removed from workspace', {
+      filePath: this.securityFilter.sanitizePath(filePath),
+      relativePath: path.relative(this.currentWorkspace, filePath),
+      operationId,
+      wasTemplate: this.templateIndex.has(filePath)
+    });
+
+    try {
+      // Remove from index
+      const wasRemoved = this.templateIndex.delete(filePath);
+
+      this.performanceMonitor.endOperation(operationId);
+      this.logger.debug('File removal processed', {
+        operationId,
+        wasRemoved,
+        duration: this.getLastOperationDuration(operationId)
+      });
+
+    } catch (error) {
+      this.performanceMonitor.endOperation(operationId);
+      this.logger.error('Failed to process file removal', {
+        filePath: this.securityFilter.sanitizePath(filePath),
+        operationId,
+        error: error.message,
+        duration: this.getLastOperationDuration(operationId)
+      });
+    }
   }
 
   notifyWorkspaceChanged() {
@@ -279,6 +445,55 @@ class WorkspaceManager {
         size: template.size
       }));
     });
+  }
+
+  async loadWorkspaceConfiguration() {
+    try {
+      const workspaceId = path.basename(this.currentWorkspace);
+      const storedConfig = await this.storeManager.get(`workspaces.${workspaceId}`, {});
+
+      // Apply stored configuration
+      if (storedConfig.settings) {
+        // Apply workspace-specific settings
+        this.logger.info('Loaded workspace configuration from store', {
+          workspaceId,
+          hasSettings: !!storedConfig.settings,
+          lastOpened: storedConfig.lastOpened
+        });
+      }
+
+      // Update last opened timestamp
+      await this.storeManager.set(`workspaces.${workspaceId}.lastOpened`, new Date().toISOString());
+
+    } catch (error) {
+      this.logger.warn('Failed to load workspace configuration from store:', error);
+    }
+  }
+
+  async saveWorkspaceState() {
+    try {
+      const workspaceId = path.basename(this.currentWorkspace);
+      const workspaceState = {
+        path: this.currentWorkspace,
+        name: workspaceId,
+        settings: {
+          templateCount: this.templateIndex.size,
+          lastScan: Date.now(),
+          watcherActive: !!this.fileWatcher
+        },
+        lastOpened: new Date().toISOString()
+      };
+
+      await this.storeManager.set(`workspaces.${workspaceId}`, workspaceState);
+
+      this.logger.debug('Workspace state saved to persistent store', {
+        workspaceId,
+        templateCount: this.templateIndex.size
+      });
+
+    } catch (error) {
+      this.logger.error('Failed to save workspace state to store:', error);
+    }
   }
 
   dispose() {
@@ -333,6 +548,16 @@ module.exports = WorkspaceManager;
 - [ ] Implement incremental build system for performance
 - [ ] Create build error handling and user-friendly reporting
 - [ ] Integrate build system with workspace management
+- [ ] Add comprehensive logging to build operations
+- [ ] Implement build performance monitoring and metrics
+- [ ] Setup build security logging and validation
+- [ ] Create build audit trail and error tracking
+- [ ] Integrate persistent store for build configuration persistence
+- [ ] Implement store-based build history and caching
+- [ ] Setup store synchronization for build state management
+- [ ] Configure store backup for critical build operations
+- [ ] Implement store-based build metrics collection
+- [ ] Setup store error correction for build data integrity
 
 #### Deliverables:
 - [ ] `src/main/BuildManager.js` - Build orchestration
@@ -348,6 +573,15 @@ module.exports = WorkspaceManager;
 - [ ] Auto-rebuild works when template files change
 - [ ] Build errors are reported clearly with actionable information
 - [ ] Incremental builds improve performance for large projects
+- [ ] Build operations are comprehensively logged
+- [ ] Build performance metrics are tracked and logged
+- [ ] Build security events are monitored and logged
+- [ ] Build errors include full context and debugging information
+- [ ] Build configurations persist across application restarts
+- [ ] Build history and metrics are stored in persistent store
+- [ ] Build state is synchronized between processes
+- [ ] Store backups are created for critical build operations
+- [ ] Store error correction maintains build data integrity
 
 ## Quality Assurance
 
@@ -389,6 +623,16 @@ module.exports = WorkspaceManager;
 - [ ] Configuration system migrates and persists correctly
 - [ ] Build system executes templates successfully
 - [ ] All core TAD functionality available in Electron
+- [ ] Comprehensive logging system integrated throughout
+- [ ] Security monitoring and logging operational
+- [ ] Performance metrics collection working
+- [ ] Error tracking and reporting functional
+- [ ] Persistent store system fully integrated with workspace management
+- [ ] Workspace configurations persist across application restarts
+- [ ] Template index caching improves performance
+- [ ] Store synchronization works between main and renderer processes
+- [ ] Store backups protect critical workspace data
+- [ ] Store error correction maintains data integrity
 
 ### Quality Requirements:
 - [ ] No security vulnerabilities in file operations
@@ -405,11 +649,18 @@ module.exports = WorkspaceManager;
 ## Deliverables Summary
 
 ### Core Components:
-- [ ] WorkspaceManager with full file system integration
+- [ ] WorkspaceManager with full file system integration and logging
 - [ ] ConfigurationManager with VS Code migration
-- [ ] BuildManager with progress tracking
+- [ ] BuildManager with progress tracking and logging
 - [ ] TemplateIndexer for fast file lookups
-- [ ] FileWatcher for real-time updates
+- [ ] FileWatcher for real-time updates with security logging
+- [ ] SecurityFilter for file access validation
+- [ ] PerformanceMonitor for operation timing
+- [ ] AuditLogger for security and compliance events
+- [ ] StoreWorkspaceManager for persistent workspace configuration
+- [ ] StoreTemplateIndexer for cached template indexing
+- [ ] StoreWorkspaceSettings for workspace-specific settings persistence
+- [ ] StoreWorkspaceBackup for critical workspace operation backups
 
 ### User Interface:
 - [ ] Workspace selection dialog

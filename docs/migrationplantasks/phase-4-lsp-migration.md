@@ -32,6 +32,17 @@ Phase 4 implements a comprehensive standalone Language Server Protocol (LSP) ser
 - [ ] Implement LSP server lifecycle management (start/stop/restart)
 - [ ] Create LSP error handling and recovery mechanisms
 - [ ] Setup LSP server configuration and workspace integration
+- [ ] Integrate comprehensive LSP logging and performance monitoring
+- [ ] Implement LSP server security logging and validation
+- [ ] Setup LSP performance metrics collection and alerting
+- [ ] Create LSP audit trail and error tracking system
+- [ ] Implement LSP cross-process communication logging
+- [ ] Integrate persistent store for LSP configuration persistence
+- [ ] Implement store-based LSP server state management
+- [ ] Setup store synchronization for LSP workspace data
+- [ ] Configure store backup for critical LSP operations
+- [ ] Implement store-based LSP performance metrics storage
+- [ ] Setup store error correction for LSP data integrity
 
 #### Deliverables:
 - [ ] `src/main/LanguageServerManager.js` - LSP orchestration
@@ -46,6 +57,15 @@ Phase 4 implements a comprehensive standalone Language Server Protocol (LSP) ser
 - [ ] LSP server integrates with workspace file system
 - [ ] Error handling and recovery work properly
 - [ ] LSP server responds to basic requests
+- [ ] Comprehensive LSP logging captures all operations and errors
+- [ ] LSP performance monitoring tracks response times and throughput
+- [ ] LSP security logging validates requests and responses
+- [ ] LSP metrics collection provides operational insights
+- [ ] LSP error tracking enables effective debugging
+- [ ] LSP configurations persist across application restarts
+- [ ] LSP server state is synchronized between processes
+- [ ] Store backups protect critical LSP operation data
+- [ ] Store error correction maintains LSP data integrity
 
 #### Technical Implementation:
 
@@ -58,23 +78,46 @@ const { ipcMain } = require('electron');
 const Logger = require('./Logger');
 
 class LanguageServerManager {
-  constructor(workspaceManager) {
+  constructor(workspaceManager, storeManager, logger) {
     this.workspaceManager = workspaceManager;
+    this.storeManager = storeManager;
     this.serverProcess = null;
     this.requestId = 0;
     this.pendingRequests = new Map();
-    this.logger = new Logger();
+    this.logger = logger.child({
+      component: 'LanguageServerManager',
+      lspVersion: '1.0.0'
+    });
     this.isRunning = false;
+    this.performanceMonitor = {
+      startOperation: (name) => this.logger.time(`lsp-${name}`),
+      endOperation: (name) => this.logger.timeEnd(`lsp-${name}`)
+    };
+    this.metrics = {
+      requestsProcessed: 0,
+      errorsEncountered: 0,
+      averageResponseTime: 0,
+      uptime: 0
+    };
   }
 
   async startServer() {
+    const operationId = `lsp-start-${Date.now()}`;
+    this.performanceMonitor.startOperation(operationId);
+
     if (this.isRunning) {
-      this.logger.warn('LSP server is already running');
+      this.logger.warn('LSP server is already running', { operationId });
       return;
     }
 
     try {
-      this.logger.info('Starting Nunjucks language server...');
+      this.logger.info('Starting Nunjucks language server', {
+        operationId,
+        workspacePath: this.workspaceManager.currentWorkspace,
+        nodeVersion: process.version,
+        platform: process.platform,
+        arch: process.arch
+      });
 
       // Start the language server process
       const serverPath = path.join(__dirname, 'lsp', 'nunjucks-language-server.js');
@@ -84,12 +127,16 @@ class LanguageServerManager {
         env: {
           ...process.env,
           NODE_ENV: 'production',
-          WORKSPACE_PATH: this.workspaceManager.currentWorkspace
+          WORKSPACE_PATH: this.workspaceManager.currentWorkspace,
+          LOG_LEVEL: 'debug' // LSP server logging level
         }
       });
 
-      // Setup communication
+      // Setup communication with logging
       this.setupServerCommunication();
+
+      // Load LSP configuration from persistent store
+      await this.loadLSPConfiguration();
 
       // Setup IPC handlers
       this.setupIPCHandlers();
@@ -98,10 +145,31 @@ class LanguageServerManager {
       await this.waitForServerReady();
 
       this.isRunning = true;
-      this.logger.info('Nunjucks language server started successfully');
+      this.metrics.uptime = Date.now();
+
+      // Save LSP server state to persistent store
+      await this.saveLSPState();
+
+      this.performanceMonitor.endOperation(operationId);
+
+      this.logger.info('Nunjucks language server started successfully', {
+        operationId,
+        duration: this.getLastOperationDuration(operationId),
+        processId: this.serverProcess.pid,
+        memoryUsage: process.memoryUsage()
+      });
 
     } catch (error) {
-      this.logger.error('Failed to start LSP server:', error);
+      this.performanceMonitor.endOperation(operationId);
+      this.metrics.errorsEncountered++;
+
+      this.logger.error('Failed to start LSP server', {
+        operationId,
+        error: error.message,
+        stack: error.stack,
+        duration: this.getLastOperationDuration(operationId),
+        workspacePath: this.workspaceManager.currentWorkspace
+      });
       throw error;
     }
   }
@@ -160,32 +228,81 @@ class LanguageServerManager {
   }
 
   async sendRequest(method, params) {
+    const requestId = ++this.requestId;
+    const operationId = `lsp-request-${requestId}`;
+    this.performanceMonitor.startOperation(operationId);
+
     if (!this.isRunning) {
+      this.logger.error('LSP request failed - server not running', {
+        method,
+        requestId,
+        operationId
+      });
       throw new Error('LSP server is not running');
     }
 
-    const id = ++this.requestId;
     const request = {
       jsonrpc: '2.0',
-      id,
+      id: requestId,
       method,
       params
     };
 
+    this.logger.debug('Sending LSP request', {
+      method,
+      requestId,
+      operationId,
+      paramsSize: JSON.stringify(params).length,
+      pendingRequests: this.pendingRequests.size
+    });
+
     return new Promise((resolve, reject) => {
       // Set timeout for request
       const timeout = setTimeout(() => {
-        this.pendingRequests.delete(id);
+        this.pendingRequests.delete(requestId);
+        this.metrics.errorsEncountered++;
+        this.performanceMonitor.endOperation(operationId);
+
+        this.logger.error('LSP request timeout', {
+          method,
+          requestId,
+          operationId,
+          timeout: 10000,
+          duration: this.getLastOperationDuration(operationId)
+        });
+
         reject(new Error(`LSP request timeout: ${method}`));
       }, 10000);
 
-      this.pendingRequests.set(id, {
+      this.pendingRequests.set(requestId, {
         resolve: (result) => {
           clearTimeout(timeout);
+          this.metrics.requestsProcessed++;
+          this.performanceMonitor.endOperation(operationId);
+
+          this.logger.debug('LSP request completed successfully', {
+            method,
+            requestId,
+            operationId,
+            duration: this.getLastOperationDuration(operationId),
+            resultSize: JSON.stringify(result).length
+          });
+
           resolve(result);
         },
         reject: (error) => {
           clearTimeout(timeout);
+          this.metrics.errorsEncountered++;
+          this.performanceMonitor.endOperation(operationId);
+
+          this.logger.error('LSP request failed', {
+            method,
+            requestId,
+            operationId,
+            error: error.message,
+            duration: this.getLastOperationDuration(operationId)
+          });
+
           reject(error);
         }
       });
@@ -193,9 +310,26 @@ class LanguageServerManager {
       // Send request to server
       try {
         this.serverProcess.stdin.write(JSON.stringify(request) + '\n');
+        this.logger.trace('LSP request sent to server process', {
+          method,
+          requestId,
+          operationId,
+          processId: this.serverProcess.pid
+        });
       } catch (error) {
         clearTimeout(timeout);
-        this.pendingRequests.delete(id);
+        this.pendingRequests.delete(requestId);
+        this.metrics.errorsEncountered++;
+        this.performanceMonitor.endOperation(operationId);
+
+        this.logger.error('Failed to send LSP request to server', {
+          method,
+          requestId,
+          operationId,
+          error: error.message,
+          processId: this.serverProcess.pid
+        });
+
         reject(new Error(`Failed to send LSP request: ${error.message}`));
       }
     });
@@ -309,6 +443,49 @@ class LanguageServerManager {
 
       checkReady();
     });
+  }
+
+  async loadLSPConfiguration() {
+    try {
+      const storedConfig = await this.storeManager.get('lsp', {});
+
+      // Apply stored LSP configuration
+      if (storedConfig.settings) {
+        this.logger.info('Loaded LSP configuration from store', {
+          hasSettings: !!storedConfig.settings,
+          lastStarted: storedConfig.lastStarted
+        });
+      }
+
+      // Update last started timestamp
+      await this.storeManager.set('lsp.lastStarted', new Date().toISOString());
+
+    } catch (error) {
+      this.logger.warn('Failed to load LSP configuration from store:', error);
+    }
+  }
+
+  async saveLSPState() {
+    try {
+      const lspState = {
+        isRunning: this.isRunning,
+        uptime: this.metrics.uptime,
+        requestsProcessed: this.metrics.requestsProcessed,
+        errorsEncountered: this.metrics.errorsEncountered,
+        lastStarted: new Date().toISOString(),
+        processId: this.serverProcess?.pid || null
+      };
+
+      await this.storeManager.set('lsp.state', lspState);
+
+      this.logger.debug('LSP server state saved to persistent store', {
+        isRunning: this.isRunning,
+        requestsProcessed: this.metrics.requestsProcessed
+      });
+
+    } catch (error) {
+      this.logger.error('Failed to save LSP state to store:', error);
+    }
   }
 
   dispose() {
@@ -789,6 +966,14 @@ async function handleRequest(request) {
 - [ ] Performance targets achieved: <100ms parsing, <50ms completion responses
 - [ ] Comprehensive testing infrastructure with unit and integration tests
 - [ ] Seamless integration with Electron application architecture
+- [ ] LSP logging system captures all server operations and client interactions
+- [ ] LSP performance monitoring provides real-time metrics and alerts
+- [ ] LSP security logging validates all requests and responses
+- [ ] LSP error tracking enables comprehensive debugging and troubleshooting
+- [ ] LSP configurations persist across application restarts
+- [ ] LSP server state is synchronized between processes
+- [ ] Store backups protect critical LSP operation data
+- [ ] Store error correction maintains LSP data integrity
 
 ### Quality Requirements:
 - [ ] LSP implementation follows protocol standards
@@ -805,10 +990,17 @@ async function handleRequest(request) {
 ## Deliverables Summary
 
 ### Core LSP Components:
-- [ ] LanguageServerManager for orchestration
-- [ ] NunjucksLanguageServer implementation
-- [ ] LSP client for renderer communication
-- [ ] LSP protocol message handlers
+- [ ] LanguageServerManager for orchestration with logging
+- [ ] NunjucksLanguageServer implementation with performance monitoring
+- [ ] LSP client for renderer communication with security logging
+- [ ] LSP protocol message handlers with audit trails
+- [ ] LSP performance metrics collector
+- [ ] LSP security validator and logger
+- [ ] LSP error tracking and reporting system
+- [ ] StoreLSPManager for persistent LSP configuration
+- [ ] StoreLSPStateManager for LSP server state persistence
+- [ ] StoreLSPMetrics for LSP performance metrics storage
+- [ ] StoreLSPBackup for critical LSP operation backups
 
 ### LSP Features:
 - [ ] Definition provider for template navigation
